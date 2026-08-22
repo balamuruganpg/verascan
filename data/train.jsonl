@@ -1,0 +1,10 @@
+{"id": 1, "text": "What is the capital of France? The capital is Paris."}
+{"id": 2, "text": "Photosynthesis is the process by which green plants use sunlight to synthesize nutrients from carbon dioxide and water."}
+{"id": 3, "text": "Gradient descent is an optimization algorithm used to minimize the loss function in machine learning models."}
+{"id": 4, "text": "The Python programming language was created by Guido van Rossum and first released in 1991."}
+{"id": 5, "text": "Transformers rely on self-attention mechanisms to compute representations of input sequences without using recurrent networks."}
+{"id": 6, "text": "To sort an array in ascending order in Python, use the built-in sorted() function or .sort() method."}
+{"id": 7, "text": "Supervised learning algorithms require labeled training data consisting of input-output pairs."}
+{"id": 8, "text": "The quick brown fox jumps over the lazy dog."}
+{"id": 9, "text": "Quantum computing harnesses the phenomena of superposition and entanglement to perform calculations."}
+{"id": 10, "text": "Data normalization scales numerical values into a standard range, typically between 0 and 1."}
