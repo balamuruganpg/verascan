@@ -15,14 +15,20 @@
 
 <p align="center">
   <strong>Detect exact, fuzzy, and semantic data leakage between training and evaluation datasets.</strong><br>
-  Built for LLM fine-tuning, benchmark validation, RAG pipelines, and synthetic data auditing.
+  Built for LLM fine-tuning, benchmark integrity, RAG validation, and synthetic data auditing.
+</p>
+
+<br>
+
+<p align="center">
+  <img src="assets/report-preview.png" alt="Verascan Interactive HTML Report Preview" width="100%">
 </p>
 
 </div>
 
 ---
 
-## Overview
+## 🎯 Overview
 
 Data contamination occurs when evaluation or benchmark examples leak into a model's training data. This compromises evaluation validity, inflates benchmark scores, and masks real-world model degradation.
 
@@ -33,19 +39,19 @@ Data contamination occurs when evaluation or benchmark examples leak into a mode
 
 ---
 
-## Features
+## ✨ Features
 
 - **Multi-Tier Detection**: Run exact, fuzzy, and semantic algorithms independently or in a cascaded pipeline.
 - **Cross-Method Deduplication**: Matches identified by exact hashing are automatically excluded from fuzzy/semantic passes to prevent double-counting.
 - **Multi-Format Ingestion**: Natively accepts `pandas.DataFrame`, `JSONL`, `CSV`, Hugging Face `datasets.Dataset`, and Python `list[str]`.
-- **Interactive HTML Reports**: Generates self-contained, offline-ready HTML reports featuring search, method filtering, and word-level diffs.
+- **Interactive HTML Reports**: Generates self-contained, offline-ready HTML reports featuring live search, method filtering, and word-level diffs.
 - **CI/CD Integration**: CLI includes `--fail-above` to fail builds if contamination exceeds an allowed threshold.
 - **Lightweight Core**: Installs cleanly with minimal dependencies; heavy ML dependencies (`sentence-transformers`, `faiss-cpu`) are optional extras.
 - **Noise-Free Execution**: Built-in log suppression prevents noisy C++/oneDNN and framework deprecation logs from polluting `stderr`.
 
 ---
 
-## Detection Engines
+## 🔬 Detection Engines
 
 | Method | Algorithm | Complexity / Speed | Best For |
 |---|---|---|---|
@@ -55,7 +61,7 @@ Data contamination occurs when evaluation or benchmark examples leak into a mode
 
 ---
 
-## Installation
+## 📦 Installation
 
 ```bash
 # Core installation (exact + fuzzy matching)
@@ -73,7 +79,7 @@ pip install "verascan[all]"
 
 ---
 
-## Quickstart
+## 🚀 Quickstart
 
 ### Python API
 
@@ -84,7 +90,7 @@ import verascan
 report = verascan.check(
     train="data/train.jsonl",
     eval="data/eval.jsonl",
-    methods=["exact", "fuzzy"],
+    methods=["exact", "fuzzy", "semantic"],
     threshold=0.85,
 )
 
@@ -103,7 +109,7 @@ for match in report.flagged(min_score=0.90):
     print(f"  Eval : {match.eval_text}")
     print(f"  Train: {match.train_text}")
 
-# Export reports
+# Export interactive HTML and machine-readable JSON reports
 report.to_html("contamination_report.html")
 report.to_json("contamination_report.json")
 ```
@@ -116,19 +122,20 @@ report.to_json("contamination_report.json")
 ===============================================
   Train size      : 50,000
   Eval size       : 1,000
-  Methods         : exact, fuzzy
+  Methods         : exact, fuzzy, semantic
   Threshold       : 0.85
 -----------------------------------------------
   Total matches   : 14
   Contaminated    : 12 / 1,000 eval samples (1.2%)
     Exact matches : 4
-    Fuzzy matches : 10
+    Fuzzy matches : 7
+    Semantic hits : 3
 ===============================================
 ```
 
 ---
 
-## Supported Input Formats
+## 📂 Supported Input Formats
 
 Verascan normalises inputs into clean text sequences automatically:
 
@@ -164,13 +171,13 @@ report = verascan.check(train=train_ds, eval=eval_ds, column="text")
 
 ---
 
-## CLI Usage
+## 💻 CLI Usage
 
 The `verascan` command-line interface enables automated checks in terminal workflows and CI/CD pipelines:
 
 ```bash
 # Basic contamination check
-verascan check --train train.jsonl --eval eval.jsonl
+verascan check --train data/train.jsonl --eval data/eval.jsonl
 
 # Specify custom column, methods, and threshold
 verascan check \
@@ -178,19 +185,19 @@ verascan check \
   --eval data/eval.csv \
   --methods exact,fuzzy \
   --threshold 0.80 \
-  --column instruction \
+  --column text \
   --output report.html
 
 # CI/CD Gate: Fail build if contamination rate exceeds 1%
 verascan check \
-  --train train.jsonl \
-  --eval eval.jsonl \
+  --train data/train.jsonl \
+  --eval data/eval.jsonl \
   --fail-above 0.01
 ```
 
 ---
 
-## Interactive HTML Reports
+## 📊 Interactive HTML Reports
 
 The HTML report generated via `report.to_html("report.html")` is **100% self-contained** (no external fonts, CDNs, or scripts required):
 
@@ -202,7 +209,7 @@ The HTML report generated via `report.to_html("report.html")` is **100% self-con
 
 ---
 
-## ContaminationReport API
+## ⚙️ ContaminationReport API
 
 ```python
 report = verascan.check(train, eval)
@@ -236,7 +243,7 @@ Each match in `report.matches` contains:
 
 ---
 
-## Limitations
+## ⚠️ Limitations
 
 - **Large-Scale Semantic Search**: While FAISS provides fast approximate search, semantic matching encodes all samples using transformer models, which is compute-intensive on CPU for corpora with millions of rows. For very large datasets, start with `methods=["exact", "fuzzy"]`.
 - **Character N-Gram Sensitivity**: Fuzzy matching relies on character 5-grams by default. Very short texts (fewer than 5 characters) fall back to exact matching.
@@ -244,7 +251,7 @@ Each match in `report.matches` contains:
 
 ---
 
-## Development
+## 🛠️ Development
 
 ```bash
 # Clone repository
@@ -267,6 +274,6 @@ mypy src/
 
 ---
 
-## License
+## 📄 License
 
 Distributed under the [MIT License](https://github.com/balamuruganpg/verascan/blob/main/LICENSE).
