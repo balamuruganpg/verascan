@@ -72,5 +72,7 @@ for match in report.flagged(min_score=0.5):
 
 report.to_html("quickstart_report.html")
 report.to_json("quickstart_report.json")
+report.to_cleaned("quickstart_eval_cleaned.jsonl")
 print("Saved interactive HTML report to: quickstart_report.html")
 print("Saved machine-readable JSON to : quickstart_report.json")
+print("Saved decontaminated eval set to: quickstart_eval_cleaned.jsonl")

@@ -6,7 +6,7 @@ from collections.abc import Sequence
 
 from verascan.engines.exact import find_exact_matches
 from verascan.engines.fuzzy import find_fuzzy_matches
-from verascan.loaders import DataInput, load_texts
+from verascan.loaders import DataInput, load_eval_payload, load_texts
 from verascan.report import ContaminationReport, MatchRecord
 
 _VALID_METHODS = {"exact", "fuzzy", "semantic"}
@@ -63,9 +63,10 @@ def check(
                     f"Unknown method '{method_name}'. Valid methods: {sorted(_VALID_METHODS)}"
                 )
 
-    # 1. Load texts
+    # 1. Load texts (retain original eval rows for cleaned-eval export)
     train_texts = load_texts(train, column=column)
-    eval_texts = load_texts(eval, column=column)
+    eval_payload = load_eval_payload(eval, column=column)
+    eval_texts = eval_payload.texts
 
     all_matches: list[MatchRecord] = []
 
@@ -138,4 +139,8 @@ def check(
         matches=all_matches,
         methods_used=methods_list,
         threshold=threshold,
+        eval_texts=eval_texts,
+        eval_records=eval_payload.records,
+        eval_columns=eval_payload.columns,
+        eval_column=column,
     )

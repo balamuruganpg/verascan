@@ -45,6 +45,7 @@ Data contamination occurs when evaluation or benchmark examples leak into a mode
 - **Cross-Method Deduplication**: Matches identified by exact hashing are automatically excluded from fuzzy/semantic passes to prevent double-counting.
 - **Multi-Format Ingestion**: Natively accepts `pandas.DataFrame`, `JSONL`, `CSV`, Hugging Face `datasets.Dataset`, and Python `list[str]`.
 - **Interactive HTML Reports**: Generates self-contained, offline-ready HTML reports featuring live search, method filtering, and word-level diffs.
+- **Cleaned Eval Export**: Drop contaminated eval rows and write a reusable CSV/JSONL set (`cleaned_eval()`, `to_cleaned()`, CLI `--output-cleaned`).
 - **CI/CD Integration**: CLI includes `--fail-above` to fail builds if contamination exceeds an allowed threshold.
 - **Lightweight Core**: Installs cleanly with minimal dependencies; heavy ML dependencies (`sentence-transformers`, `faiss-cpu`) are optional extras.
 - **Noise-Free Execution**: Built-in log suppression prevents noisy C++/oneDNN and framework deprecation logs from polluting `stderr`.
@@ -112,6 +113,10 @@ for match in report.flagged(min_score=0.90):
 # Export interactive HTML and machine-readable JSON reports
 report.to_html("contamination_report.html")
 report.to_json("contamination_report.json")
+
+# Export a decontaminated eval set (contaminated rows removed)
+cleaned = report.cleaned_eval()          # list[str] or pandas.DataFrame
+report.to_cleaned("eval_cleaned.jsonl")  # .jsonl, .csv, or .json
 ```
 
 ### Terminal Output
@@ -186,7 +191,8 @@ verascan check \
   --methods exact,fuzzy \
   --threshold 0.80 \
   --column text \
-  --output report.html
+  --output report.html \
+  --output-cleaned eval_cleaned.jsonl
 
 # CI/CD Gate: Fail build if contamination rate exceeds 1%
 verascan check \
@@ -229,6 +235,10 @@ report.summary()  # Prints ASCII summary to stdout
 report.to_dict()  # Serialises report to a Python dict
 report.to_json("report.json")  # Exports JSON file
 report.to_html("report.html")  # Exports self-contained interactive HTML report
+report.cleaned_eval()  # Eval examples with contaminated rows removed
+report.contaminated_eval()  # Eval examples that were flagged
+report.to_cleaned("eval_clean.jsonl")  # Write cleaned eval as CSV / JSONL / JSON
+report.to_contaminated("eval_flagged.jsonl")  # Write flagged eval rows
 ```
 
 ### `MatchRecord` Structure

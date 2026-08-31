@@ -145,3 +145,48 @@ def test_check_methods_flag(tmp_path: Path) -> None:
         ],
     )
     assert result.exit_code == 0
+
+
+def test_check_output_cleaned_jsonl(tmp_path: Path) -> None:
+    train, eval_ = _make_data_files(tmp_path)
+    out_cleaned = str(tmp_path / "cleaned.jsonl")
+    result = runner.invoke(
+        app,
+        [
+            "check",
+            "--train",
+            train,
+            "--eval",
+            eval_,
+            "--output-cleaned",
+            out_cleaned,
+            "--no-progress",
+        ],
+    )
+    assert result.exit_code == 0
+    assert Path(out_cleaned).exists()
+    rows = [
+        json.loads(line)
+        for line in Path(out_cleaned).read_text(encoding="utf-8").splitlines()
+        if line
+    ]
+    assert rows == [{"text": "something different"}]
+    assert "Cleaned eval written to" in result.stdout
+
+
+def test_check_output_cleaned_bad_extension(tmp_path: Path) -> None:
+    train, eval_ = _make_data_files(tmp_path)
+    result = runner.invoke(
+        app,
+        [
+            "check",
+            "--train",
+            train,
+            "--eval",
+            eval_,
+            "--output-cleaned",
+            str(tmp_path / "cleaned.parquet"),
+            "--no-progress",
+        ],
+    )
+    assert result.exit_code == 2

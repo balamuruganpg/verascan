@@ -8,7 +8,7 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-from verascan.loaders import load_texts
+from verascan.loaders import load_eval_payload, load_texts
 
 # ---------- list[str] --------------------------------------------------- #
 
@@ -110,3 +110,38 @@ def test_unsupported_extension(tmp_path: Path) -> None:
 def test_unsupported_type() -> None:
     with pytest.raises(TypeError, match="Unsupported data source type"):
         load_texts(12345)  # type: ignore[arg-type]
+
+
+# ---------- load_eval_payload ------------------------------------------- #
+
+
+def test_load_eval_payload_list_has_no_records() -> None:
+    loaded = load_eval_payload(["hello", "world"])
+    assert loaded.texts == ["hello", "world"]
+    assert loaded.records is None
+    assert loaded.columns is None
+
+
+def test_load_eval_payload_dataframe_keeps_columns() -> None:
+    df = pd.DataFrame({"text": ["alpha"], "label": ["x"]})
+    loaded = load_eval_payload(df)
+    assert loaded.texts == ["alpha"]
+    assert loaded.columns == ["text", "label"]
+    assert loaded.records is not None
+    assert loaded.records[0]["text"] == "alpha"
+    assert loaded.records[0]["label"] == "x"
+
+
+def test_load_eval_payload_jsonl_keeps_extra_keys(tmp_path: Path) -> None:
+    jl_file = tmp_path / "data.jsonl"
+    jl_file.write_text(
+        json.dumps({"text": "first", "id": 1})
+        + "\n"
+        + json.dumps({"text": "second", "id": 2})
+        + "\n",
+        encoding="utf-8",
+    )
+    loaded = load_eval_payload(str(jl_file))
+    assert loaded.texts == ["first", "second"]
+    assert loaded.columns == ["text", "id"]
+    assert loaded.records == [{"text": "first", "id": 1}, {"text": "second", "id": 2}]

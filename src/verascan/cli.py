@@ -57,6 +57,11 @@ def check(
         "-o",
         help="Write report to this path (.html or .json).",
     ),
+    output_cleaned: str | None = typer.Option(
+        None,
+        "--output-cleaned",
+        help="Write decontaminated eval set to this path (.csv, .jsonl, or .json).",
+    ),
     no_progress: bool = typer.Option(False, "--no-progress", help="Disable progress bars."),
 ) -> None:
     """Run a contamination check and print a summary."""
@@ -91,6 +96,14 @@ def check(
             # Default to JSON.
             report.to_json(output)
             typer.echo(f"JSON report written to: {output}")
+
+    if output_cleaned:
+        try:
+            report.to_cleaned(output_cleaned)
+        except ValueError as exc:
+            typer.secho(f"Error: {exc}", fg=typer.colors.RED, err=True)
+            raise typer.Exit(code=2) from exc
+        typer.echo(f"Cleaned eval written to: {output_cleaned}")
 
     # CI gate.
     if report.contamination_rate > fail_above:

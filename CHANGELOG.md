@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [Unreleased]
+
+### Added
+- **Cleaned eval export**: After `check()`, emit a decontaminated evaluation set with flagged rows removed.
+  - `ContaminationReport.cleaned_eval()` returns a `list[str]` or `pandas.DataFrame` matching the original eval input (extra columns preserved).
+  - `ContaminationReport.to_cleaned(path)` writes CSV / JSONL / JSON.
+  - `contaminated_eval()` / `to_contaminated(path)` export the flagged rows.
+  - CLI: `verascan check --output-cleaned PATH`.
+  - Empty-contamination case returns the original eval unchanged.
+
 ## [0.1.0] - 2026-08-22
 
 ### Added
