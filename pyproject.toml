@@ -81,6 +81,9 @@ packages = ["src/verascan"]
 [tool.hatch.build.targets.wheel.force-include]
 "src/verascan/report.html" = "verascan/report.html"
 
+[tool.hatch.build.targets.sdist.force-include]
+"src/verascan/report.html" = "src/verascan/report.html"
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-v --tb=short"
