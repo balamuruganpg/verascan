@@ -2,6 +2,7 @@
 
 import os
 import warnings
+from importlib.metadata import version
 
 
 def test_import() -> None:
@@ -12,7 +13,7 @@ def test_version_string() -> None:
     from verascan import __version__
 
     assert isinstance(__version__, str)
-    assert __version__ == "0.1.0"
+    assert __version__ == version("verascan")
 
 
 def test_quiet_environment_configured() -> None:
