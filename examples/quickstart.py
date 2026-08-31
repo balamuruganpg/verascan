@@ -12,7 +12,7 @@ from __future__ import annotations
 import verascan
 from verascan.engines import semantic_available
 
-# ── 1. Sample Datasets ──────────────────────────────────
+# ── 1. Sample Datasets ──────────────────────────────────────────────────
 
 train_corpus = [
     "The quick brown fox jumps over the lazy dog.",
@@ -32,7 +32,7 @@ eval_corpus = [
     "Data quality is essential for reliable ML models.",  # Near-duplicate / phrasing variation
 ]
 
-# ── 2. Run Contamination Scan ─────────────────────────────
+# ── 2. Run Contamination Scan ───────────────────────────────────────────
 
 methods = ["exact", "fuzzy"]
 if semantic_available():
@@ -48,7 +48,7 @@ report = verascan.check(
     show_progress=True,
 )
 
-# ── 3. Inspect Summary & Flagged Pairs ──────────────────────────
+# ── 3. Inspect Summary & Flagged Pairs ──────────────────────────────────
 
 report.summary()
 
@@ -68,7 +68,7 @@ for match in report.flagged(min_score=0.5):
     print(f"    Train: {match.train_text}")
     print()
 
-# ── 4. Export Reports ───────────────────────────────
+# ── 4. Export Reports ───────────────────────────────────────────────────
 
 report.to_html("quickstart_report.html")
 report.to_json("quickstart_report.json")
