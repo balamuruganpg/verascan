@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-08-31
+
 ### Added
 - **Cleaned eval export**: After `check()`, emit a decontaminated evaluation set with flagged rows removed.
   - `ContaminationReport.cleaned_eval()` returns a `list[str]` or `pandas.DataFrame` matching the original eval input (extra columns preserved).
