@@ -29,7 +29,7 @@ class MatchRecord:
     eval_text: str
     train_text: str
     score: float
-    method: str  # "exact" | "fuzzy" | "semantic"
+    method: str  # "exact" | "ngram" | "fuzzy" | "semantic"
     diff: str | None = None  # word-level diff HTML (populated by report)
 
 
@@ -99,6 +99,10 @@ class ContaminationReport:
         return sum(1 for m in self.matches if m.method == "fuzzy")
 
     @property
+    def ngram_count(self) -> int:
+        return sum(1 for m in self.matches if m.method == "ngram")
+
+    @property
     def semantic_count(self) -> int:
         return sum(1 for m in self.matches if m.method == "semantic")
 
@@ -123,6 +127,8 @@ class ContaminationReport:
         ]
         if self.exact_count:
             lines.append(f"    Exact matches : {self.exact_count}")
+        if self.ngram_count:
+            lines.append(f"    N-gram matches: {self.ngram_count}")
         if self.fuzzy_count:
             lines.append(f"    Fuzzy matches : {self.fuzzy_count}")
         if self.semantic_count:
@@ -146,6 +152,7 @@ class ContaminationReport:
             "contamination_rate": round(self.contamination_rate, 6),
             "total_matches": len(self.matches),
             "exact_matches": self.exact_count,
+            "ngram_matches": self.ngram_count,
             "fuzzy_matches": self.fuzzy_count,
             "semantic_matches": self.semantic_count,
             "matches": [

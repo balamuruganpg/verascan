@@ -14,7 +14,7 @@
 <br>
 
 <p align="center">
-  <strong>Detect exact, fuzzy, and semantic data leakage between training and evaluation datasets.</strong><br>
+  <strong>Detect exact, n-gram, fuzzy, and semantic data leakage between training and evaluation datasets.</strong><br>
   Built for LLM fine-tuning, benchmark integrity, RAG validation, and synthetic data auditing.
 </p>
 
@@ -34,15 +34,16 @@ Data contamination occurs when evaluation or benchmark examples leak into a mode
 
 **Verascan** provides a multi-tier contamination detection pipeline:
 1. **Exact match** — $O(N)$ hash-based verbatim duplicate detection with normalisation.
-2. **Fuzzy match** — MinHash + Locality-Sensitive Hashing (LSH) for near-duplicates and minor edits.
-3. **Semantic match** — Dense embedding similarity search (`sentence-transformers` + FAISS) for paraphrased content.
+2. **N-gram overlap** — GPT-3-style word 13-gram collisions (Brown et al., 2020) with frequency filtering.
+3. **Fuzzy match** — MinHash + Locality-Sensitive Hashing (LSH) for near-duplicates and minor edits.
+4. **Semantic match** — Dense embedding similarity search (`sentence-transformers` + FAISS) for paraphrased content.
 
 ---
 
 ## ✨ Features
 
-- **Multi-Tier Detection**: Run exact, fuzzy, and semantic algorithms independently or in a cascaded pipeline.
-- **Cross-Method Deduplication**: Matches identified by exact hashing are automatically excluded from fuzzy/semantic passes to prevent double-counting.
+- **Multi-Tier Detection**: Run exact, ngram, fuzzy, and semantic algorithms independently or in a cascaded pipeline.
+- **Cross-Method Deduplication**: Matches identified by earlier methods are automatically excluded from later passes to prevent double-counting.
 - **Multi-Format Ingestion**: Natively accepts `pandas.DataFrame`, `JSONL`, `CSV`, Hugging Face `datasets.Dataset`, and Python `list[str]`.
 - **Interactive HTML Reports**: Generates self-contained, offline-ready HTML reports featuring live search, method filtering, and word-level diffs.
 - **Cleaned Eval Export**: Drop contaminated eval rows and write a reusable CSV/JSONL set (`cleaned_eval()`, `to_cleaned()`, CLI `--output-cleaned`).
@@ -57,6 +58,7 @@ Data contamination occurs when evaluation or benchmark examples leak into a mode
 | Method | Algorithm | Complexity / Speed | Best For |
 |---|---|---|---|
 | **`exact`** | SHA-256 Content Hashing (normalised) | $O(N + M)$ &bull; *Microseconds* | Verbatim duplicates, casing/whitespace variations |
+| **`ngram`** | Word *n*-gram overlap (GPT-3 / Brown et al.) | $O(N + M)$ &bull; *Milliseconds* | Long shared phrases; classic 13-gram contamination |
 | **`fuzzy`** | MinHash + LSH (`datasketch`) | $O(N + M)$ &bull; *Milliseconds* | Minor edits, word insertions/deletions, truncations |
 | **`semantic`** | Dense Vector Cosine Similarity (FAISS) | $O(M \cdot d)$ &bull; *Seconds* | Paraphrased sentences, reworded questions, synonyms |
 
@@ -91,7 +93,7 @@ import verascan
 report = verascan.check(
     train="data/train.jsonl",
     eval="data/eval.jsonl",
-    methods=["exact", "fuzzy", "semantic"],
+    methods=["exact", "ngram", "fuzzy", "semantic"],
     threshold=0.85,
 )
 
@@ -224,6 +226,7 @@ report = verascan.check(train, eval)
 report.contamination_rate  # float: Fraction of eval examples found in train (0.0 to 1.0)
 report.total_matches  # int: Total flagged pairs
 report.exact_count  # int: Exact duplicate count
+report.ngram_count  # int: N-gram overlap match count
 report.fuzzy_count  # int: Fuzzy / near-duplicate count
 report.semantic_count  # int: Semantic match count
 report.train_size  # int: Size of training corpus
@@ -248,8 +251,8 @@ Each match in `report.matches` contains:
 - `train_index: int` — Index of the sample in the training dataset.
 - `eval_text: str` — Evaluation sample text.
 - `train_text: str` — Matching training sample text.
-- `score: float` — Similarity metric (`1.0` for exact matches, Jaccard for fuzzy, cosine for semantic).
-- `method: str` — Engine that produced the match (`"exact"`, `"fuzzy"`, `"semantic"`).
+- `score: float` — Similarity metric (`1.0` for exact matches, n-gram overlap ratio for ngram, Jaccard for fuzzy, cosine for semantic).
+- `method: str` — Engine that produced the match (`"exact"`, `"ngram"`, `"fuzzy"`, `"semantic"`).
 
 ---
 
@@ -257,6 +260,7 @@ Each match in `report.matches` contains:
 
 - **Large-Scale Semantic Search**: While FAISS provides fast approximate search, semantic matching encodes all samples using transformer models, which is compute-intensive on CPU for corpora with millions of rows. For very large datasets, start with `methods=["exact", "fuzzy"]`.
 - **Character N-Gram Sensitivity**: Fuzzy matching relies on character 5-grams by default. Very short texts (fewer than 5 characters) fall back to exact matching.
+- **Word N-Gram Length**: The `ngram` method needs at least `ngram_n` words (default 13) after cleaning; shorter eval texts produce no n-gram matches.
 - **Cross-Lingual Matching**: The default semantic model (`all-MiniLM-L6-v2`) is optimized for English text. For multilingual evaluation datasets, specify a multilingual model via `model_name="paraphrase-multilingual-MiniLM-L12-v2"`.
 
 ---

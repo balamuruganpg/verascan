@@ -117,3 +117,22 @@ def test_full_pipeline_html_json(tmp_path: Path) -> None:
     assert html_path.exists()
     assert json_path.exists()
     assert "Verascan" in html_path.read_text(encoding="utf-8")
+
+
+def test_check_ngram_only() -> None:
+    """methods=["ngram"] finds shared 13-grams end-to-end via verascan.check."""
+    shared = " ".join(f"tok{i}" for i in range(13))
+    train = [shared + " train-tail"]
+    eval_ = [shared + " eval-tail", "totally different short text"]
+
+    report = verascan.check(
+        train,
+        eval_,
+        methods=["ngram"],
+        show_progress=False,
+    )
+    assert report.exact_count == 0
+    assert report.fuzzy_count == 0
+    assert report.ngram_count == 1
+    assert report.contamination_rate == 0.5
+    assert report.matches[0].method == "ngram"

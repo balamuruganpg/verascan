@@ -23,6 +23,8 @@
     --fuzzy-dim: rgba(245, 158, 11, 0.14);
     --semantic: #6366f1;
     --semantic-dim: rgba(99, 102, 241, 0.14);
+    --ngram: #14b8a6;
+    --ngram-dim: rgba(20, 184, 166, 0.14);
     --success: #10b981;
     --success-dim: rgba(16, 185, 129, 0.14);
     --radius-sm: 6px;
@@ -222,6 +224,11 @@
     background: var(--semantic-dim);
     color: var(--semantic);
     border-color: rgba(99, 102, 241, 0.3);
+  }
+  .method-ngram {
+    background: var(--ngram-dim);
+    color: var(--ngram);
+    border-color: rgba(20, 184, 166, 0.3);
   }
 
   /* Controls & Filters Bar */
@@ -562,6 +569,9 @@
       <div class='metric-label'>Detection Breakdown</div>
       <div style='display:flex; gap:0.4rem; margin-top:0.6rem; flex-wrap:wrap;'>
         <span class='badge method-exact'>Exact: {{ report.exact_matches }}</span>
+        {% if report.ngram_matches > 0 or 'ngram' in report.methods_used %}
+        <span class='badge method-ngram'>N-gram: {{ report.ngram_matches }}</span>
+        {% endif %}
         <span class='badge method-fuzzy'>Fuzzy: {{ report.fuzzy_matches }}</span>
         {% if report.semantic_matches > 0 or 'semantic' in report.methods_used %}
         <span class='badge method-semantic'>Semantic: {{ report.semantic_matches }}</span>
@@ -581,6 +591,11 @@
       {% if report.exact_matches > 0 %}
       <button class='filter-btn' onclick='filterMethod(`exact`)' id='btn-exact'>
         Exact <span class='count-chip'>{{ report.exact_matches }}</span>
+      </button>
+      {% endif %}
+      {% if report.ngram_matches > 0 %}
+      <button class='filter-btn' onclick='filterMethod(`ngram`)' id='btn-ngram'>
+        N-gram <span class='count-chip'>{{ report.ngram_matches }}</span>
       </button>
       {% endif %}
       {% if report.fuzzy_matches > 0 %}

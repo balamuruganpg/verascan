@@ -1,4 +1,4 @@
-"""Detection engines — exact, fuzzy, and semantic.
+"""Detection engines — exact, ngram, fuzzy, and semantic.
 
 Semantic matching is optional.  Use :func:`semantic_available` to check
 whether the heavy dependencies are installed before calling semantic methods.
