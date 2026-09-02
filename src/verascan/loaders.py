@@ -13,7 +13,7 @@ from __future__ import annotations
 import json
 import os
 from pathlib import Path
-from typing import Any, NamedTuple
+from typing import Any, NamedTuple, cast
 
 import pandas as pd
 
@@ -116,7 +116,7 @@ def load_eval_payload(source: DataInput, *, column: str = "text") -> LoadedEval:
         texts = _load_dataframe(source, column)
         return LoadedEval(
             texts=texts,
-            records=source.to_dict(orient="records"),
+            records=cast(list[dict[str, Any]], source.to_dict(orient="records")),
             columns=list(source.columns),
         )
 
@@ -128,7 +128,7 @@ def load_eval_payload(source: DataInput, *, column: str = "text") -> LoadedEval:
             frame = source.to_pandas()
             return LoadedEval(
                 texts=texts,
-                records=frame.to_dict(orient="records"),
+                records=cast(list[dict[str, Any]], frame.to_dict(orient="records")),
                 columns=list(frame.columns),
             )
         return LoadedEval(
@@ -148,7 +148,7 @@ def load_eval_payload(source: DataInput, *, column: str = "text") -> LoadedEval:
             df = _load_csv(path, column)
             return LoadedEval(
                 texts=df[column].astype(str).tolist(),
-                records=df.to_dict(orient="records"),
+                records=cast(list[dict[str, Any]], df.to_dict(orient="records")),
                 columns=list(df.columns),
             )
         if ext in {".jsonl", ".json"}:

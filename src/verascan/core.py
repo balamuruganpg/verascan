@@ -84,7 +84,6 @@ def check(
         exact_matches = find_exact_matches(train_texts, eval_texts, show_progress=show_progress)
         all_matches.extend(exact_matches)
 
-
     # --- ngram ----------------------------------------------------------- #
     if "ngram" in methods_list:
         matched_eval_ng = {match.eval_index for match in all_matches}

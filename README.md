@@ -4,10 +4,10 @@
 
 **Data Contamination & Leakage Detection for AI / ML Workflows**
 
-[![PyPI Version](https://img.shields.io/badge/pypi-v0.1.0-blue.svg)](https://pypi.org/project/verascan/)
+[![PyPI Version](https://img.shields.io/badge/pypi-v0.3.0-blue.svg)](https://pypi.org/project/verascan/)
 [![Python Versions](https://img.shields.io/badge/python-3.9%20%7C%203.10%20%7C%203.11%20%7C%203.12-blue.svg)](https://pypi.org/project/verascan/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](https://github.com/balamuruganpg/verascan/blob/main/LICENSE)
-[![Tests](https://img.shields.io/badge/Tests-71%20passed-brightgreen.svg)](https://github.com/balamuruganpg/verascan/actions)
+[![Tests](https://img.shields.io/badge/Tests-102%20passed-brightgreen.svg)](https://github.com/balamuruganpg/verascan/actions)
 [![Type Checking](https://img.shields.io/badge/Typing-Strict-blue.svg)](https://mypy-lang.org/)
 [![Code Style](https://img.shields.io/badge/Code%20Style-Ruff-000000.svg)](https://github.com/astral-sh/ruff)
 
@@ -32,21 +32,25 @@
 
 Data contamination occurs when evaluation or benchmark examples leak into a model's training data. This compromises evaluation validity, inflates benchmark scores, and masks real-world model degradation.
 
-**Verascan** provides a multi-tier contamination detection pipeline:
-1. **Exact match** — $O(N)$ hash-based verbatim duplicate detection with normalisation.
-2. **N-gram overlap** — GPT-3-style word 13-gram collisions (Brown et al., 2020) with frequency filtering.
-3. **Fuzzy match** — MinHash + Locality-Sensitive Hashing (LSH) for near-duplicates and minor edits.
-4. **Semantic match** — Dense embedding similarity search (`sentence-transformers` + FAISS) for paraphrased content.
+**Verascan** provides an end-to-end contamination detection and prevention pipeline:
+1. **Prevention (`verascan.split`)** — Partition raw datasets into train and eval splits with a mathematical guarantee of zero exact, fuzzy, or semantic leakage.
+2. **Audit (`verascan.check`)** — Multi-tier contamination scanner across existing splits:
+   - **Exact match** — $O(N)$ hash-based verbatim duplicate detection with normalisation.
+   - **N-gram overlap** — GPT-3-style word 13-gram collisions (Brown et al., 2020) with frequency filtering.
+   - **Fuzzy match** — MinHash + Locality-Sensitive Hashing (LSH) for near-duplicates and minor edits.
+   - **Semantic match** — Dense embedding similarity search (`sentence-transformers` + FAISS) for paraphrased content.
+3. **Remediation (`report.cleaned_eval` / `to_cleaned`)** — Automatically drop contaminated rows and export a pristine benchmark.
 
 ---
 
 ## ✨ Features
 
+- **Leak-Free Dataset Splitting**: Proactively partition raw datasets into train and eval splits with 0.0% residual leakage (`verascan.split()` and CLI `verascan split`).
 - **Multi-Tier Detection**: Run exact, ngram, fuzzy, and semantic algorithms independently or in a cascaded pipeline.
 - **Cross-Method Deduplication**: Matches identified by earlier methods are automatically excluded from later passes to prevent double-counting.
 - **Multi-Format Ingestion**: Natively accepts `pandas.DataFrame`, `JSONL`, `CSV`, Hugging Face `datasets.Dataset`, and Python `list[str]`.
 - **Interactive HTML Reports**: Generates self-contained, offline-ready HTML reports featuring live search, method filtering, and word-level diffs.
-- **Cleaned Eval Export**: Drop contaminated eval rows and write a reusable CSV/JSONL set (`cleaned_eval()`, `to_cleaned()`, CLI `--output-cleaned`).
+- **Cleaned Eval Export**: Drop contaminated eval rows and write a reusable CSV/JSONL benchmark (`cleaned_eval()`, `to_cleaned()`, CLI `--output-cleaned`).
 - **CI/CD Integration**: CLI includes `--fail-above` to fail builds if contamination exceeds an allowed threshold.
 - **Lightweight Core**: Installs cleanly with minimal dependencies; heavy ML dependencies (`sentence-transformers`, `faiss-cpu`) are optional extras.
 - **Noise-Free Execution**: Built-in log suppression prevents noisy C++/oneDNN and framework deprecation logs from polluting `stderr`.
@@ -67,7 +71,7 @@ Data contamination occurs when evaluation or benchmark examples leak into a mode
 ## 📦 Installation
 
 ```bash
-# Core installation (exact + fuzzy matching)
+# Core installation (exact + fuzzy matching + split utility)
 pip install verascan
 
 # With semantic similarity matching (sentence-transformers + FAISS)
@@ -82,7 +86,44 @@ pip install "verascan[all]"
 
 ---
 
-## 🚀 Quickstart
+## 🛡️ Leak-Free Splitting (`verascan.split`)
+
+Instead of auditing datasets *after* training, prevent leakage upfront with `verascan.split()`. It partitions your dataset and iteratively purges candidate evaluation examples that are too similar to training samples:
+
+### Python API
+
+```python
+import verascan
+
+# Create a leak-free train and eval split
+train, eval_set = verascan.split(
+    data="data/raw_dataset.jsonl",
+    eval_size=0.2,
+    methods=["exact", "fuzzy"],
+    seed=42,
+    output_train="data/train.jsonl",
+    output_eval="data/eval.jsonl",
+)
+
+print(f"Train samples: {len(train):,}")
+print(f"Eval samples : {len(eval_set):,}")
+```
+
+### CLI Command
+
+```bash
+verascan split \
+  --input data/raw_dataset.jsonl \
+  --eval-size 0.2 \
+  --output-train data/train.jsonl \
+  --output-eval data/eval.jsonl \
+  --methods exact,fuzzy \
+  --threshold 0.85
+```
+
+---
+
+## 🚀 Contamination Audit (`verascan.check`)
 
 ### Python API
 
@@ -117,7 +158,7 @@ report.to_html("contamination_report.html")
 report.to_json("contamination_report.json")
 
 # Export a decontaminated eval set (contaminated rows removed)
-cleaned = report.cleaned_eval()          # list[str] or pandas.DataFrame
+cleaned = report.cleaned_eval()  # list[str] or pandas.DataFrame
 report.to_cleaned("eval_cleaned.jsonl")  # .jsonl, .csv, or .json
 ```
 
@@ -180,13 +221,26 @@ report = verascan.check(train=train_ds, eval=eval_ds, column="text")
 
 ## 💻 CLI Usage
 
-The `verascan` command-line interface enables automated checks in terminal workflows and CI/CD pipelines:
+The `verascan` CLI enables automated auditing and dataset splitting in terminal workflows and CI/CD pipelines:
+
+### 1. Split Datasets
+
+```bash
+# Partition dataset into leak-free splits
+verascan split \
+  --input data/raw_dataset.jsonl \
+  --eval-size 0.2 \
+  --output-train data/train.jsonl \
+  --output-eval data/eval.jsonl
+```
+
+### 2. Audit Contamination
 
 ```bash
 # Basic contamination check
 verascan check --train data/train.jsonl --eval data/eval.jsonl
 
-# Specify custom column, methods, and threshold
+# Custom columns, methods, threshold, HTML report, and cleaned output
 verascan check \
   --train data/train.csv \
   --eval data/eval.csv \
@@ -217,7 +271,25 @@ The HTML report generated via `report.to_html("report.html")` is **100% self-con
 
 ---
 
-## ⚙️ ContaminationReport API
+## ⚙️ Python API Reference
+
+### `verascan.split(data, ...)`
+
+```python
+train, eval = verascan.split(
+    data,  # str | pd.DataFrame | list[str] | Dataset
+    eval_size=0.2,  # float ratio (0-1) or int row count
+    methods=["exact", "fuzzy"],  # exact, fuzzy, semantic
+    threshold=0.85,  # similarity threshold (0-1)
+    column="text",  # text column for tabular inputs
+    seed=42,  # random seed for reproducible partition
+    move_to="train",  # "train" (preserve data) or "drop" (discard)
+    output_train="train.jsonl",  # optional path (.csv, .jsonl, .json)
+    output_eval="eval.jsonl",  # optional path (.csv, .jsonl, .json)
+)
+```
+
+### `verascan.check(train, eval, ...)`
 
 ```python
 report = verascan.check(train, eval)

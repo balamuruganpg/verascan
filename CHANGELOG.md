@@ -9,13 +9,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-09-02
+
 ### Added
+- **Leak-Free Dataset Splitting (`verascan.split`)**:
+  - `verascan.split(data, eval_size=0.2, methods=["exact", "fuzzy"], seed=42)` partitions a dataset into training and evaluation sets while guaranteeing zero exact, fuzzy, or semantic leakage.
+  - Iterative leak purification: detects candidate leakage between splits and moves contaminated candidate eval examples out of eval (into train by default, preserving all samples).
+  - Supports `move_to="train"` (default) or `move_to="drop"`.
+  - Type-safe format preservation: returns `list[str]` for string list inputs, and `pandas.DataFrame` (preserving all original columns) for DataFrames, CSV, JSONL, and HuggingFace Datasets.
+  - Direct file output options: `output_train` and `output_eval` supporting `.csv`, `.jsonl`, and `.json`.
+- **CLI Command (`verascan split`)**:
+  - `verascan split --input data.jsonl --eval-size 0.2 --output-train train.jsonl --output-eval eval.jsonl`.
+  - Configurable `--methods`, `--threshold`, `--column`, `--seed`, `--move-to`, and `--no-progress`.
 - **`ngram` detection method**: GPT-3-style word *n*-gram overlap (Brown et al., 2020).
   - Lowercases text, strips punctuation per token, builds word 13-grams by default.
   - Drops training grams appearing in ≥ `ngram_max_count` documents (default 10).
   - Flags eval examples that share any retained gram; score is the per-pair overlap ratio.
   - API: `methods=["ngram"]` with optional `ngram_n` / `ngram_max_count`.
   - CLI: `--methods ngram` (combinable with `exact`, `fuzzy`, `semantic`).
+- **Total Matches Property**:
+  - Added `report.total_matches` convenience property on `ContaminationReport`.
 
 ## [0.2.0] - 2026-08-31
 

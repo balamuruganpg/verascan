@@ -8,7 +8,7 @@ import json
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import pandas as pd
 from jinja2 import Template
@@ -81,6 +81,11 @@ class ContaminationReport:
     def flagged(self, *, min_score: float = 0.0) -> list[MatchRecord]:
         """Return matches at or above *min_score*."""
         return [m for m in self.matches if m.score >= min_score]
+
+    @property
+    def total_matches(self) -> int:
+        """Total number of flagged matches."""
+        return len(self.matches)
 
     @property
     def contamination_rate(self) -> float:
@@ -226,8 +231,8 @@ class ContaminationReport:
         if self.eval_records is not None:
             frame = pd.DataFrame(self.eval_records, columns=self.eval_columns)
             if not indices:
-                return frame.iloc[0:0].copy()
-            return frame.iloc[indices].reset_index(drop=True)
+                return cast("pd.DataFrame", frame.iloc[0:0].copy())
+            return cast("pd.DataFrame", frame.iloc[indices].reset_index(drop=True))
         return [self.eval_texts[i] for i in indices]
 
     def cleaned_eval(self) -> list[str] | pd.DataFrame:
