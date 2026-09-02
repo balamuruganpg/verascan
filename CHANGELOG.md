@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **`ngram` detection method**: GPT-3-style word *n*-gram overlap (Brown et al., 2020).
+  - Lowercases text, strips punctuation per token, builds word 13-grams by default.
+  - Drops training grams appearing in ≥ `ngram_max_count` documents (default 10).
+  - Flags eval examples that share any retained gram; score is the per-pair overlap ratio.
+  - API: `methods=["ngram"]` with optional `ngram_n` / `ngram_max_count`.
+  - CLI: `--methods ngram` (combinable with `exact`, `fuzzy`, `semantic`).
+
 ## [0.2.0] - 2026-08-31
 
 ### Added

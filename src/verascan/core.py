@@ -6,10 +6,11 @@ from collections.abc import Sequence
 
 from verascan.engines.exact import find_exact_matches
 from verascan.engines.fuzzy import find_fuzzy_matches
+from verascan.engines.ngram import find_ngram_matches
 from verascan.loaders import DataInput, load_eval_payload, load_texts
 from verascan.report import ContaminationReport, MatchRecord
 
-_VALID_METHODS = {"exact", "fuzzy", "semantic"}
+_VALID_METHODS = {"exact", "ngram", "fuzzy", "semantic"}
 _DEFAULT_METHODS = ["exact", "fuzzy"]
 
 
@@ -23,6 +24,8 @@ def check(
     model_name: str = "all-MiniLM-L6-v2",
     batch_size: int = 64,
     num_perm: int = 128,
+    ngram_n: int = 13,
+    ngram_max_count: int = 10,
     show_progress: bool = True,
 ) -> ContaminationReport:
     """Scan *eval* for contamination against *train*.
@@ -34,7 +37,8 @@ def check(
         a :class:`pandas.DataFrame`, a ``list[str]``, or a HuggingFace Dataset.
     methods:
         Detection methods to run. Defaults to ``["exact", "fuzzy"]``.
-        Add ``"semantic"`` for embedding-based matching (requires ``verascan[semantic]``).
+        Add ``"ngram"`` for GPT-3-style 13-gram word overlap, or ``"semantic"``
+        for embedding-based matching (requires ``verascan[semantic]``).
     threshold:
         Similarity threshold for fuzzy and semantic methods (0 – 1).
     column:
@@ -45,6 +49,11 @@ def check(
         Batch size for semantic embedding computation.
     num_perm:
         Number of MinHash permutations for fuzzy matching.
+    ngram_n:
+        Word n-gram size for the ``ngram`` method (GPT-3 default: 13).
+    ngram_max_count:
+        Drop training n-grams seen in at least this many documents
+        (too frequent). Default: 10.
     show_progress:
         Whether to display tqdm progress bars.
 
@@ -74,6 +83,32 @@ def check(
     if "exact" in methods_list:
         exact_matches = find_exact_matches(train_texts, eval_texts, show_progress=show_progress)
         all_matches.extend(exact_matches)
+
+
+    # --- ngram ----------------------------------------------------------- #
+    if "ngram" in methods_list:
+        matched_eval_ng = {match.eval_index for match in all_matches}
+        ngram_eval_texts = [t for i, t in enumerate(eval_texts) if i not in matched_eval_ng]
+        idx_map_ng = [i for i in range(len(eval_texts)) if i not in matched_eval_ng]
+
+        ngram_matches = find_ngram_matches(
+            train_texts,
+            ngram_eval_texts,
+            n=ngram_n,
+            max_count=ngram_max_count,
+            show_progress=show_progress,
+        )
+        for match in ngram_matches:
+            all_matches.append(
+                MatchRecord(
+                    eval_index=idx_map_ng[match.eval_index],
+                    train_index=match.train_index,
+                    eval_text=match.eval_text,
+                    train_text=match.train_text,
+                    score=match.score,
+                    method=match.method,
+                )
+            )
 
     # --- fuzzy ----------------------------------------------------------- #
     if "fuzzy" in methods_list:

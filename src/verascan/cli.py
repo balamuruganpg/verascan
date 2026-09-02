@@ -42,7 +42,7 @@ def check(
         "exact,fuzzy",
         "--methods",
         "-m",
-        help="Comma-separated detection methods: exact, fuzzy, semantic.",
+        help="Comma-separated detection methods: exact, ngram, fuzzy, semantic.",
     ),
     threshold: float = typer.Option(0.85, "--threshold", help="Similarity threshold (0-1)."),
     column: str = typer.Option("text", "--column", "-c", help="Name of the text column."),
