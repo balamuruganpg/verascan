@@ -230,6 +230,12 @@
     color: var(--ngram);
     border-color: rgba(20, 184, 166, 0.3);
   }
+  .badge-benchmark {
+    background: rgba(56, 189, 248, 0.14);
+    color: var(--primary);
+    border-color: rgba(56, 189, 248, 0.3);
+    font-weight: 600;
+  }
 
   /* Controls & Filters Bar */
   .controls-bar {
@@ -579,32 +585,44 @@
       </div>
       <div class='metric-sub' style='margin-top:0.5rem;'>Across {{ report.methods_used | length }} engine(s)</div>
     </div>
+    {% if report.benchmarks %}
+    <div class='metric-card'>
+      <div class='metric-label'>Audited Benchmarks</div>
+      <div class='metric-value'>{{ report.benchmarks | length }}</div>
+      <div style='display:flex; gap:0.4rem; margin-top:0.6rem; flex-wrap:wrap;'>
+        {% for bm in report.benchmarks %}
+        <span class='badge badge-benchmark'>{{ bm }}: {{ report.benchmark_counts.get(bm, 0) if report.benchmark_counts else 0 }}</span>
+        {% endfor %}
+      </div>
+      <div class='metric-sub' style='margin-top:0.5rem;'>Contamination count per benchmark</div>
+    </div>
+    {% endif %}
   </section>
 
   {% if matches %}
   <!-- Controls Bar -->
   <section class='controls-bar'>
     <div class='filter-tabs'>
-      <button class='filter-btn active' onclick='filterMethod(`all`)' id='btn-all'>
+      <button class='filter-btn method-btn active' onclick='filterMethod(`all`)' id='btn-all'>
         All <span class='count-chip'>{{ matches | length }}</span>
       </button>
       {% if report.exact_matches > 0 %}
-      <button class='filter-btn' onclick='filterMethod(`exact`)' id='btn-exact'>
+      <button class='filter-btn method-btn' onclick='filterMethod(`exact`)' id='btn-exact'>
         Exact <span class='count-chip'>{{ report.exact_matches }}</span>
       </button>
       {% endif %}
       {% if report.ngram_matches > 0 %}
-      <button class='filter-btn' onclick='filterMethod(`ngram`)' id='btn-ngram'>
+      <button class='filter-btn method-btn' onclick='filterMethod(`ngram`)' id='btn-ngram'>
         N-gram <span class='count-chip'>{{ report.ngram_matches }}</span>
       </button>
       {% endif %}
       {% if report.fuzzy_matches > 0 %}
-      <button class='filter-btn' onclick='filterMethod(`fuzzy`)' id='btn-fuzzy'>
+      <button class='filter-btn method-btn' onclick='filterMethod(`fuzzy`)' id='btn-fuzzy'>
         Fuzzy <span class='count-chip'>{{ report.fuzzy_matches }}</span>
       </button>
       {% endif %}
       {% if report.semantic_matches > 0 %}
-      <button class='filter-btn' onclick='filterMethod(`semantic`)' id='btn-semantic'>
+      <button class='filter-btn method-btn' onclick='filterMethod(`semantic`)' id='btn-semantic'>
         Semantic <span class='count-chip'>{{ report.semantic_matches }}</span>
       </button>
       {% endif %}
@@ -617,20 +635,37 @@
     <div class='view-options'>
       <button class='action-btn' onclick='toggleAllDetails()' id='toggleDetailsBtn'>Collapse All</button>
     </div>
+
+    {% if report.benchmarks %}
+    <div class='filter-tabs benchmark-tabs' style='width: 100%; padding-top: 0.6rem; border-top: 1px solid var(--border-subtle);'>
+      <span style='font-size:0.8rem; font-weight:600; color:var(--text-secondary); align-self:center; margin-right:0.25rem;'>Benchmark:</span>
+      <button class='filter-btn benchmark-btn active' onclick='filterBenchmark(`all`)' id='bm-all'>
+        All Benchmarks <span class='count-chip'>{{ matches | length }}</span>
+      </button>
+      {% for bm in report.benchmarks %}
+      <button class='filter-btn benchmark-btn' onclick='filterBenchmark(`{{ bm }}`)' id='bm-{{ bm }}'>
+        {{ bm }} <span class='count-chip'>{{ report.benchmark_counts.get(bm, 0) if report.benchmark_counts else 0 }}</span>
+      </button>
+      {% endfor %}
+    </div>
+    {% endif %}
   </section>
 
   <!-- Flagged Pairs List -->
   <section class='matches-list' id='matchesList'>
     {% for m in matches %}
-    <div class='match-card' data-method='{{ m.method }}' data-score='{{ m.score }}' data-eval-idx='{{ m.eval_index }}' data-train-idx='{{ m.train_index }}' data-text='{{ m.eval_text_escaped }} {{ m.train_text_escaped }}'>
+    <div class='match-card' data-method='{{ m.method }}' data-benchmark='{{ m.benchmark or "" }}' data-score='{{ m.score }}' data-eval-idx='{{ m.eval_index }}' data-train-idx='{{ m.train_index }}' data-text='{{ m.eval_text_escaped }} {{ m.train_text_escaped }}'>
       <div class='match-card-header'>
         <div class='match-card-left'>
           <span class='match-idx'>#{{ loop.index }}</span>
+          {% if m.benchmark %}
+          <span class='badge badge-benchmark'>{{ m.benchmark }}</span>
+          {% endif %}
           <span class='badge method-{{ m.method }}'>{{ m.method }}</span>
           <span class='score-badge'>Score: {{ '%.3f' | format(m.score) }}</span>
         </div>
         <div style='font-size:0.8rem; color:var(--text-secondary);'>
-          Eval [<code>#{{ m.eval_index }}</code>] &harr; Train [<code>#{{ m.train_index }}</code>]
+          {% if m.benchmark %}<strong>[{{ m.benchmark }}]</strong> {% endif %}Eval [<code>#{{ m.eval_index }}</code>] &harr; Train [<code>#{{ m.train_index }}</code>]
         </div>
       </div>
       <div class='match-card-body'>
@@ -679,13 +714,22 @@
 
 <script>
   let currentMethod = 'all';
+  let currentBenchmark = 'all';
   let searchQuery = '';
   let detailsExpanded = true;
 
   function filterMethod(method) {
     currentMethod = method;
-    document.querySelectorAll('.filter-btn').forEach(btn => btn.classList.remove('active'));
+    document.querySelectorAll('.method-btn').forEach(btn => btn.classList.remove('active'));
     const activeBtn = document.getElementById('btn-' + method);
+    if (activeBtn) activeBtn.classList.add('active');
+    applyFilters();
+  }
+
+  function filterBenchmark(bm) {
+    currentBenchmark = bm;
+    document.querySelectorAll('.benchmark-btn').forEach(btn => btn.classList.remove('active'));
+    const activeBtn = document.getElementById('bm-' + bm);
     if (activeBtn) activeBtn.classList.add('active');
     applyFilters();
   }
@@ -699,14 +743,16 @@
     const cards = document.querySelectorAll('.match-card');
     cards.forEach(card => {
       const method = card.getAttribute('data-method');
+      const benchmark = card.getAttribute('data-benchmark') || '';
       const text = card.getAttribute('data-text').toLowerCase();
       const evalIdx = card.getAttribute('data-eval-idx');
       const trainIdx = card.getAttribute('data-train-idx');
 
       const matchesMethod = (currentMethod === 'all' || method === currentMethod);
+      const matchesBenchmark = (currentBenchmark === 'all' || benchmark === currentBenchmark);
       const matchesSearch = (!searchQuery || text.includes(searchQuery) || evalIdx === searchQuery || trainIdx === searchQuery);
 
-      if (matchesMethod && matchesSearch) {
+      if (matchesMethod && matchesBenchmark && matchesSearch) {
         card.style.display = 'block';
       } else {
         card.style.display = 'none';

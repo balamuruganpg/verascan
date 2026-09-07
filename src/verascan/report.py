@@ -185,9 +185,13 @@ class ContaminationReport:
         enriched = []
         for m in self.matches:
             diff_html = _word_diff_html(m.train_text, m.eval_text)
+            benchmark = None
+            if self.eval_records is not None and m.eval_index < len(self.eval_records):
+                benchmark = self.eval_records[m.eval_index].get("benchmark")
             enriched.append(
                 {
                     **asdict(m),
+                    "benchmark": benchmark,
                     "diff_html": diff_html,
                     "eval_text_escaped": html.escape(m.eval_text),
                     "train_text_escaped": html.escape(m.train_text),

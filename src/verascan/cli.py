@@ -192,3 +192,93 @@ def split(
         lines.append(f"  Eval set written to : {output_eval}")
     lines.append("")
     typer.echo("\n".join(lines))
+
+
+@app.command()
+def audit(
+    train: str = typer.Option(..., "--train", "-t", help="Path to training data (CSV or JSONL)."),
+    benchmarks: str = typer.Option(
+        "mmlu,gsm8k,humaneval",
+        "--benchmarks",
+        "-b",
+        help="Comma-separated benchmark presets: mmlu, gsm8k, humaneval.",
+    ),
+    methods: str = typer.Option(
+        "exact,fuzzy",
+        "--methods",
+        "-m",
+        help="Comma-separated detection methods: exact, ngram, fuzzy, semantic.",
+    ),
+    threshold: float = typer.Option(0.85, "--threshold", help="Similarity threshold (0-1)."),
+    column: str = typer.Option(
+        "text", "--column", "-c", help="Name of the text column in train data."
+    ),
+    fail_above: float = typer.Option(
+        1.0,
+        "--fail-above",
+        help="Exit with code 1 if contamination rate exceeds this (useful for CI).",
+    ),
+    output: str | None = typer.Option(
+        None,
+        "--output",
+        "-o",
+        help="Write report to this path (.html or .json).",
+    ),
+    output_json: str | None = typer.Option(
+        None,
+        "--output-json",
+        help="Write machine-readable JSON report to this path.",
+    ),
+    synthetic: bool = typer.Option(
+        False,
+        "--synthetic",
+        help="Use small synthetic stand-ins for testing (no Hugging Face download).",
+    ),
+    no_progress: bool = typer.Option(False, "--no-progress", help="Disable progress bars."),
+) -> None:
+    """Audit a training dataset against popular public evaluation benchmarks."""
+    from verascan.audit import audit as run_audit
+
+    benchmark_list = [b.strip() for b in benchmarks.split(",") if b.strip()]
+    method_list = [m.strip() for m in methods.split(",") if m.strip()]
+
+    try:
+        report = run_audit(
+            train=train,
+            benchmarks=benchmark_list,
+            methods=method_list,
+            threshold=threshold,
+            column=column,
+            synthetic=synthetic,
+            show_progress=not no_progress,
+        )
+    except (FileNotFoundError, ValueError, KeyError, ImportError, RuntimeError) as exc:
+        typer.secho(f"Error: {exc}", fg=typer.colors.RED, err=True)
+        raise typer.Exit(code=2) from exc
+
+    report.summary()
+
+    if output:
+        if output.endswith(".html"):
+            report.to_html(output)
+            typer.echo(f"HTML report written to: {output}")
+        elif output.endswith(".json"):
+            report.to_json(output)
+            typer.echo(f"JSON report written to: {output}")
+        else:
+            report.to_html(output)
+            typer.echo(f"Report written to: {output}")
+
+    if output_json:
+        report.to_json(output_json)
+        typer.echo(f"JSON report written to: {output_json}")
+
+    # CI gate.
+    if report.contamination_rate > fail_above:
+        typer.secho(
+            f"\n✘ FAIL: Contamination rate {report.contamination_rate:.2%} "
+            f"exceeds threshold {fail_above:.2%}",
+            fg=typer.colors.RED,
+            err=True,
+        )
+        raise typer.Exit(code=1)

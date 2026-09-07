@@ -190,3 +190,106 @@ def test_check_output_cleaned_bad_extension(tmp_path: Path) -> None:
         ],
     )
     assert result.exit_code == 2
+
+
+def test_cli_audit_help() -> None:
+    result = runner.invoke(app, ["audit", "--help"])
+    assert result.exit_code == 0
+    assert "Usage:" in result.stdout
+    assert "--train" in result.stdout
+    assert "--benchmarks" in result.stdout
+    assert "--synthetic" in result.stdout
+    assert "--fail-above" in result.stdout
+
+
+def test_cli_audit_synthetic_planted_leak(tmp_path: Path) -> None:
+    from verascan.benchmarks import SYNTHETIC_BENCHMARKS
+
+    planted = SYNTHETIC_BENCHMARKS["gsm8k"][0]["question"]
+    train_file = tmp_path / "train.jsonl"
+    train_file.write_text(json.dumps({"text": planted}) + "\n", encoding="utf-8")
+
+    out_html = tmp_path / "audit.html"
+    out_json = tmp_path / "audit.json"
+
+    result = runner.invoke(
+        app,
+        [
+            "audit",
+            "--train",
+            str(train_file),
+            "--benchmarks",
+            "gsm8k",
+            "--synthetic",
+            "--methods",
+            "exact",
+            "--output",
+            str(out_html),
+            "--output-json",
+            str(out_json),
+            "--no-progress",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert "Verascan Benchmark Audit Report" in result.stdout
+    assert "gsm8k" in result.stdout
+    assert "1 contaminated" in result.stdout
+    assert out_html.exists()
+    assert out_json.exists()
+
+    # Verify benchmark filter and badge in generated HTML
+    html_text = out_html.read_text(encoding="utf-8")
+    assert "badge-benchmark" in html_text
+    assert "filterBenchmark" in html_text
+    assert "Audited Benchmarks" in html_text
+
+
+def test_cli_audit_unknown_benchmark(tmp_path: Path) -> None:
+    train_file = tmp_path / "train.jsonl"
+    train_file.write_text('{"text":"some data"}\n', encoding="utf-8")
+
+    result = runner.invoke(
+        app,
+        [
+            "audit",
+            "--train",
+            str(train_file),
+            "--benchmarks",
+            "nonexistent_benchmark",
+            "--synthetic",
+            "--no-progress",
+        ],
+    )
+
+    assert result.exit_code == 2
+    assert "Error:" in result.stderr
+    assert "Unknown benchmark 'nonexistent_benchmark'" in result.stderr
+
+
+def test_cli_audit_fail_above(tmp_path: Path) -> None:
+    from verascan.benchmarks import SYNTHETIC_BENCHMARKS
+
+    planted = SYNTHETIC_BENCHMARKS["gsm8k"][0]["question"]
+    train_file = tmp_path / "train.jsonl"
+    train_file.write_text(json.dumps({"text": planted}) + "\n", encoding="utf-8")
+
+    result = runner.invoke(
+        app,
+        [
+            "audit",
+            "--train",
+            str(train_file),
+            "--benchmarks",
+            "gsm8k",
+            "--synthetic",
+            "--methods",
+            "exact",
+            "--fail-above",
+            "0.0",
+            "--no-progress",
+        ],
+    )
+
+    assert result.exit_code == 1
+    assert "FAIL" in result.stderr
