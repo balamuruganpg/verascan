@@ -431,17 +431,19 @@ def load_benchmark(
     else:
         raise ValueError(f"Unknown benchmark '{clean_name}'")
 
-    check_datasets_available()
     try:
+        check_datasets_available()
         return loader(split)
     except Exception as exc:
         if allow_synthetic:
             logger.warning(
-                "Failed to download benchmark '%s' from Hugging Face: %s. Using synthetic stand-in.",
+                "Failed to load benchmark '%s' from Hugging Face: %s. Using synthetic stand-in.",
                 clean_name,
                 exc,
             )
             return [dict(row) for row in SYNTHETIC_BENCHMARKS[clean_name]]
+        if isinstance(exc, ImportError):
+            raise
         raise RuntimeError(
             f"Failed to load benchmark '{clean_name}' from Hugging Face: {exc}\n"
             "Ensure you have an active internet connection, or pass allow_synthetic=True."

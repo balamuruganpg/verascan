@@ -58,9 +58,12 @@ def test_audit_synthetic_stand_in_direct():
 
 
 def test_audit_hf_download_unavailable_with_allow_synthetic(caplog):
-    with patch(
-        "verascan.benchmarks._load_hf_gsm8k",
-        side_effect=ConnectionError("Simulated network outage"),
+    with (
+        patch("verascan.benchmarks.check_datasets_available"),
+        patch(
+            "verascan.benchmarks._load_hf_gsm8k",
+            side_effect=ConnectionError("Simulated network outage"),
+        ),
     ):
         # When allow_synthetic=False, raises RuntimeError
         with pytest.raises(RuntimeError, match="Failed to load benchmark 'gsm8k'"):
@@ -81,6 +84,24 @@ def test_audit_hf_download_unavailable_with_allow_synthetic(caplog):
             )
             assert report.eval_size == len(SYNTHETIC_BENCHMARKS["gsm8k"])
             assert "Using synthetic stand-in" in caplog.text
+
+
+def test_audit_missing_datasets_with_allow_synthetic(caplog):
+    with (
+        patch(
+            "verascan.benchmarks.check_datasets_available",
+            side_effect=ImportError("Hugging Face 'datasets' is required"),
+        ),
+        caplog.at_level(logging.WARNING),
+    ):
+        report = verascan.audit(
+            train=["Some train text"],
+            benchmarks=["gsm8k"],
+            synthetic=False,
+            allow_synthetic=True,
+        )
+        assert report.eval_size == len(SYNTHETIC_BENCHMARKS["gsm8k"])
+        assert "Using synthetic stand-in" in caplog.text
 
 
 def test_audit_finds_exact_planted_leak_gsm8k():
