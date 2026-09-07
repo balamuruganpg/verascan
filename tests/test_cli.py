@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 from typer.testing import CliRunner
@@ -11,6 +12,11 @@ from verascan._version import __version__
 from verascan.cli import app
 
 runner = CliRunner()
+
+
+def _strip_ansi(text: str) -> str:
+    """Remove ANSI escape sequences from CLI output."""
+    return re.sub(r"\x1b\[[0-9;]*[a-zA-Z]", "", text)
 
 
 def _make_data_files(tmp_path: Path) -> tuple[str, str]:
@@ -195,11 +201,12 @@ def test_check_output_cleaned_bad_extension(tmp_path: Path) -> None:
 def test_cli_audit_help() -> None:
     result = runner.invoke(app, ["audit", "--help"])
     assert result.exit_code == 0
-    assert "Usage:" in result.stdout
-    assert "--train" in result.stdout
-    assert "--benchmarks" in result.stdout
-    assert "--synthetic" in result.stdout
-    assert "--fail-above" in result.stdout
+    output = _strip_ansi(result.stdout)
+    assert "Usage:" in output
+    assert "--train" in output
+    assert "--benchmarks" in output
+    assert "--synthetic" in output
+    assert "--fail-above" in output
 
 
 def test_cli_audit_synthetic_planted_leak(tmp_path: Path) -> None:
