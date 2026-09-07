@@ -4,10 +4,11 @@
 
 **Data Contamination & Leakage Detection for AI / ML Workflows**
 
-[![PyPI Version](https://img.shields.io/badge/pypi-v0.3.0-blue.svg)](https://pypi.org/project/verascan/)
+[![PyPI Version](https://img.shields.io/badge/pypi-v0.4.0-blue.svg)](https://pypi.org/project/verascan/)
+[![CI](https://github.com/balamuruganpg/verascan/actions/workflows/ci.yml/badge.svg)](https://github.com/balamuruganpg/verascan/actions/workflows/ci.yml)
 [![Python Versions](https://img.shields.io/badge/python-3.9%20%7C%203.10%20%7C%203.11%20%7C%203.12-blue.svg)](https://pypi.org/project/verascan/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](https://github.com/balamuruganpg/verascan/blob/main/LICENSE)
-[![Tests](https://img.shields.io/badge/Tests-102%20passed-brightgreen.svg)](https://github.com/balamuruganpg/verascan/actions)
+[![Tests](https://img.shields.io/badge/Tests-126%20passed-brightgreen.svg)](https://github.com/balamuruganpg/verascan/actions)
 [![Type Checking](https://img.shields.io/badge/Typing-Strict-blue.svg)](https://mypy-lang.org/)
 [![Code Style](https://img.shields.io/badge/Code%20Style-Ruff-000000.svg)](https://github.com/astral-sh/ruff)
 
@@ -34,12 +35,13 @@ Data contamination occurs when evaluation or benchmark examples leak into a mode
 
 **Verascan** provides an end-to-end contamination detection and prevention pipeline:
 1. **Prevention (`verascan.split`)** — Partition raw datasets into train and eval splits with a mathematical guarantee of zero exact, fuzzy, or semantic leakage.
-2. **Audit (`verascan.check`)** — Multi-tier contamination scanner across existing splits:
+2. **Benchmark Audit (`verascan.audit`)** — Audit training data against popular public benchmarks (`mmlu`, `gsm8k`, `humaneval`).
+3. **Contamination Audit (`verascan.check`)** — Multi-tier contamination scanner across existing splits:
    - **Exact match** — $O(N)$ hash-based verbatim duplicate detection with normalisation.
    - **N-gram overlap** — GPT-3-style word 13-gram collisions (Brown et al., 2020) with frequency filtering.
    - **Fuzzy match** — MinHash + Locality-Sensitive Hashing (LSH) for near-duplicates and minor edits.
    - **Semantic match** — Dense embedding similarity search (`sentence-transformers` + FAISS) for paraphrased content.
-3. **Remediation (`report.cleaned_eval` / `to_cleaned`)** — Automatically drop contaminated rows and export a pristine benchmark.
+4. **Remediation (`report.cleaned_eval` / `to_cleaned`)** — Automatically drop contaminated rows and export a pristine benchmark.
 
 ---
 
@@ -119,6 +121,26 @@ verascan split \
   --output-eval data/eval.jsonl \
   --methods exact,fuzzy \
   --threshold 0.85
+```
+
+---
+
+## 🏛️ Benchmark Auditing (`verascan.audit`)
+
+Audit your training data directly against popular public evaluation benchmarks (`mmlu`, `gsm8k`, `humaneval`) to detect pre-training contamination before benchmark evaluation:
+
+```python
+import verascan
+
+report = verascan.audit(
+    train="data/train.jsonl",
+    benchmarks=["mmlu", "gsm8k", "humaneval"],
+    methods=["exact", "fuzzy"],
+    threshold=0.85,
+)
+
+report.summary()
+report.to_html("audit_report.html")
 ```
 
 ---
@@ -257,6 +279,19 @@ verascan check \
   --fail-above 0.01
 ```
 
+### 3. Benchmark Auditing
+
+```bash
+# Fast offline audit with synthetic stand-ins
+verascan audit --train train.jsonl --benchmarks mmlu,gsm8k --synthetic
+
+# Full benchmark audit with interactive HTML report
+verascan audit \
+  --train data/train.jsonl \
+  --benchmarks mmlu,gsm8k,humaneval \
+  --output audit_report.html
+```
+
 ---
 
 ## 📊 Interactive HTML Reports
@@ -287,6 +322,21 @@ train, eval = verascan.split(
     output_train="train.jsonl",  # optional path (.csv, .jsonl, .json)
     output_eval="eval.jsonl",  # optional path (.csv, .jsonl, .json)
 )
+```
+
+### `verascan.audit(train, ...)`
+
+```python
+report = verascan.audit(
+    train="train.jsonl",  # path, DataFrame, list[str], or Dataset
+    benchmarks=["mmlu", "gsm8k", "humaneval"],  # preset names
+    methods=["exact", "fuzzy"],  # exact, ngram, fuzzy, semantic
+    threshold=0.85,  # similarity cutoff
+    synthetic=False,  # set True for local offline testing
+)
+
+report.benchmark_counts  # dict: e.g. {"mmlu": 1, "gsm8k": 0, "humaneval": 2}
+report.by_benchmark()  # dict: matches grouped by benchmark name
 ```
 
 ### `verascan.check(train, eval, ...)`

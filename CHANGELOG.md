@@ -9,6 +9,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-09-07
+
+### Added
+- **Public Benchmark Contamination Audit (`verascan.audit`)**:
+  - `verascan.audit(train="train.jsonl", benchmarks=["mmlu", "gsm8k", "humaneval"])` audits a training dataset against popular public evaluation benchmarks.
+  - Built on top of existing `check()` detection engines (`exact`, `ngram`, `fuzzy`, `semantic`) without duplicating logic.
+  - Returns an `AuditReport` subclass of `ContaminationReport` with `benchmark_counts` and `by_benchmark()` helper methods.
+- **Benchmark Presets**:
+  - `mmlu`: `cais/mmlu` (config `all`, `test` split), extracting `question`.
+  - `gsm8k`: `gsm8k` / `openai/gsm8k` (`test` split), extracting `question`.
+  - `humaneval`: `openai_humaneval` (`test` split), extracting `prompt`.
+- **Synthetic Stand-Ins (`--synthetic` / `synthetic=True`)**:
+  - High-fidelity synthetic representations of `mmlu`, `gsm8k`, and `humaneval` for offline and deterministic CI/local testing without network downloads.
+  - `allow_synthetic=True` fallback when Hugging Face download is unreachable.
+- **CLI Audit Command (`verascan audit`)**:
+  - `verascan audit --train train.jsonl --benchmarks mmlu,gsm8k,humaneval --output audit.html`.
+  - Supports `--methods`, `--threshold`, `--column`, `--output`, `--output-json`, `--fail-above`, and `--synthetic`.
+- **HTML Report Benchmark Visualizations**:
+  - Added benchmark provenance badges (`[gsm8k]`, `[humaneval]`, `[mmlu]`) on match cards.
+  - Interactive benchmark filter tabs (`All Benchmarks`, `mmlu`, `gsm8k`, `humaneval`) with dynamic count chips.
+  - Summary metrics card displaying audited benchmark count and contamination breakdown.
+- **GitHub Actions CI**:
+  - Added `.github/workflows/ci.yml` testing pushes and pull requests on Python 3.11 with `pytest`.
+
 ## [0.3.0] - 2026-09-02
 
 ### Added
