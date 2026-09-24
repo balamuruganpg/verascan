@@ -18,7 +18,7 @@ from typing import Any, NamedTuple, cast
 import pandas as pd
 
 # Type alias for anything the public API accepts as a dataset.
-DataInput = str | pd.DataFrame | list[str] | Any
+DataInput = str | pd.DataFrame | list[str] | list[dict[str, Any]] | Any
 
 _HF_DATASET_TYPE: type | None = None
 
@@ -105,11 +105,35 @@ def load_eval_payload(source: DataInput, *, column: str = "text") -> LoadedEval:
     Returns a :class:`LoadedEval`. ``records`` / ``columns`` are ``None`` when
     *source* is a ``list[str]`` so callers can round-trip list vs table types.
     """
-    # --- list[str] --------------------------------------------------------
+    # --- list[str] / list[dict] -------------------------------------------
     if isinstance(source, list):
-        if not all(isinstance(item, str) for item in source):
-            raise TypeError("When passing a list, every element must be a string.")
-        return LoadedEval(texts=source, records=None, columns=None)
+        if not source:
+            return LoadedEval(texts=[], records=None, columns=None)
+        if all(isinstance(item, str) for item in source):
+            return LoadedEval(texts=cast(list[str], source), records=None, columns=None)
+        if all(isinstance(item, dict) for item in source):
+            texts: list[str] = []
+            columns: list[str] = []
+            for idx, item in enumerate(source):
+                if column not in item:
+                    raise KeyError(
+                        f"Key '{column}' not found in dict at index {idx}. "
+                        f"Available keys: {list(item.keys())}"
+                    )
+                texts.append(str(item[column]))
+                for key in item:
+                    if key not in columns:
+                        columns.append(key)
+            if not columns:
+                columns = [column]
+            return LoadedEval(
+                texts=texts,
+                records=cast(list[dict[str, Any]], source),
+                columns=columns,
+            )
+        raise TypeError(
+            "When passing a list, all elements must be strings or all elements must be dictionaries."
+        )
 
     # --- pandas DataFrame -------------------------------------------------
     if isinstance(source, pd.DataFrame):
@@ -141,7 +165,10 @@ def load_eval_payload(source: DataInput, *, column: str = "text") -> LoadedEval:
     if isinstance(source, (str, os.PathLike)):
         path = str(source)
         if not Path(path).exists():
-            raise FileNotFoundError(f"Data file not found: '{path}'")
+            raise FileNotFoundError(
+                f"Not a data file: '{path}'. "
+                f"Pass a file path, list[str], DataFrame, or Hugging Face Dataset object."
+            )
 
         ext = Path(path).suffix.lower()
         if ext == ".csv":

@@ -275,3 +275,18 @@ def test_split_edge_cases():
     # Invalid method
     with pytest.raises(ValueError, match="Unknown method"):
         split(data, methods=["nonexistent"])
+
+
+def test_split_list_of_dicts():
+    data = [
+        {"question": "Q1", "answer": "A1"},
+        {"question": "Q2", "answer": "A2"},
+        {"question": "Q3", "answer": "A3"},
+        {"question": "Q4", "answer": "A4"},
+    ]
+    train, eval_set = split(data, eval_size=0.5, column="question", seed=42)
+    assert isinstance(train, pd.DataFrame)
+    assert isinstance(eval_set, pd.DataFrame)
+    assert len(train) == 2
+    assert len(eval_set) == 2
+    assert list(train.columns) == ["question", "answer"]

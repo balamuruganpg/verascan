@@ -532,13 +532,13 @@
           <div class='status-indicator status-warn'></div>
           <div class='status-text'>
             <h2>Low Risk Contamination ({{ contamination_pct }})</h2>
-            <p>{{ report.total_matches }} matching pairs detected across datasets.</p>
+            <p>{{ report.total_matches }} matching {% if report.total_matches == 1 %}pair{% else %}pairs{% endif %} detected across datasets.</p>
           </div>
         {% else %}
           <div class='status-indicator status-danger'></div>
           <div class='status-text'>
             <h2>Significant Contamination Detected ({{ contamination_pct }})</h2>
-            <p>{{ report.total_matches }} matching pairs detected — evaluation results may be inflated.</p>
+            <p>{{ report.total_matches }} matching {% if report.total_matches == 1 %}pair{% else %}pairs{% endif %} detected — evaluation results may be inflated.</p>
           </div>
         {% endif %}
       </div>

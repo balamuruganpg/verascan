@@ -9,6 +9,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-09-24
+
+### Fixed
+- **Contamination Rate Display**:
+  - Never display `"0.0%"` when matches exist; formats very small non-zero rates with high precision (e.g. `0.006%` or `0.013%`) so the status banner and metrics are non-contradictory.
+  - Aligned singular/plural wording for match counts in the status banner.
+- **Loader Support for `list[dict]`**:
+  - Added support for passing `list[dict]` to `check()`, `split()`, `load_texts()`, and `load_eval_payload()`, extracting the specified `column` (e.g. `column="question"`).
+  - Preserves tabular records and column structure for downstream cleaned dataset export.
+- **Clearer Dataset Name / Missing File Error**:
+  - Improved error when passing a non-existent path or dataset name string (e.g. `'imdb'`): raises `FileNotFoundError: Not a data file: 'imdb'. Pass a file path, list[str], DataFrame, or Hugging Face Dataset object.`
+
 ## [0.4.0] - 2026-09-07
 
 ### Added

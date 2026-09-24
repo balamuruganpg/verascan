@@ -136,3 +136,26 @@ def test_check_ngram_only() -> None:
     assert report.ngram_count == 1
     assert report.contamination_rate == 0.5
     assert report.matches[0].method == "ngram"
+
+
+def test_check_list_of_dicts() -> None:
+    """verascan.check accepts list[dict] with custom column."""
+    train = [
+        {"question": "What is the capital of France?", "split": "train"},
+        {"question": "What is 2 + 2?", "split": "train"},
+    ]
+    eval_ = [
+        {"question": "What is the capital of France?", "split": "eval"},
+        {"question": "Explain photosynthesis.", "split": "eval"},
+    ]
+
+    report = verascan.check(
+        train,
+        eval_,
+        column="question",
+        methods=["exact"],
+        show_progress=False,
+    )
+    assert report.total_matches == 1
+    assert report.contamination_rate == 0.5
+    assert report.matches[0].eval_text == "What is the capital of France?"

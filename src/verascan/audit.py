@@ -63,7 +63,7 @@ class AuditReport(ContaminationReport):
             "-" * 47,
             f"  Total matches   : {len(self.matches)}",
             f"  Contaminated    : {len(unique_eval)} / {self.eval_size} eval samples "
-            f"({self.contamination_rate:.1%})",
+            f"({self.formatted_contamination_rate})",
         ]
         if self.exact_count:
             lines.append(f"    Exact matches : {self.exact_count}")

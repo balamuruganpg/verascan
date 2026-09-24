@@ -57,6 +57,21 @@ def _word_diff_html(a: str, b: str) -> str:
     return " ".join(parts)
 
 
+def format_contamination_rate(rate: float) -> str:
+    """Format contamination rate as a percentage string, never showing '0.0%' if rate > 0."""
+    if rate <= 0.0:
+        return "0.0%"
+    standard = f"{rate:.1%}"
+    if standard != "0.0%":
+        return standard
+    pct = rate * 100.0
+    for decimals in (3, 4, 5, 6):
+        val = f"{pct:.{decimals}f}".rstrip("0").rstrip(".")
+        if val and float(val) > 0:
+            return f"{val}%"
+    return f"{pct:.6f}%"
+
+
 # ---------------------------------------------------------------------------
 # ContaminationReport
 # ---------------------------------------------------------------------------
@@ -96,6 +111,13 @@ class ContaminationReport:
         return len(unique_eval) / self.eval_size
 
     @property
+    def formatted_contamination_rate(self) -> str:
+        """Contamination rate formatted as a percentage string, never showing '0.0%' if matches exist."""
+        if not self.matches or self.contamination_rate <= 0.0:
+            return "0.0%"
+        return format_contamination_rate(self.contamination_rate)
+
+    @property
     def exact_count(self) -> int:
         return sum(1 for m in self.matches if m.method == "exact")
 
@@ -128,7 +150,7 @@ class ContaminationReport:
             "-" * 47,
             f"  Total matches   : {len(self.matches)}",
             f"  Contaminated    : {len(unique_eval)} / {self.eval_size} eval samples "
-            f"({self.contamination_rate:.1%})",
+            f"({self.formatted_contamination_rate})",
         ]
         if self.exact_count:
             lines.append(f"    Exact matches : {self.exact_count}")
@@ -202,8 +224,10 @@ class ContaminationReport:
         html_out = _HTML_TEMPLATE.render(
             report=self.to_dict(),
             matches=enriched,
-            contamination_pct=f"{self.contamination_rate:.1%}",
-            contamination_pct_raw=round(self.contamination_rate * 100, 2),
+            contamination_pct=self.formatted_contamination_rate,
+            contamination_pct_raw=max(0.5, round(self.contamination_rate * 100, 2))
+            if self.matches
+            else 0.0,
             timestamp=timestamp,
             version=__version__,
         )

@@ -7,7 +7,12 @@ from pathlib import Path
 
 import pytest
 
-from verascan.report import ContaminationReport, MatchRecord, _word_diff_html
+from verascan.report import (
+    ContaminationReport,
+    MatchRecord,
+    _word_diff_html,
+    format_contamination_rate,
+)
 
 # ---------- MatchRecord ------------------------------------------------- #
 
@@ -70,6 +75,55 @@ def test_contamination_rate(sample_report: ContaminationReport) -> None:
 def test_contamination_rate_empty() -> None:
     r = ContaminationReport(eval_size=0)
     assert r.contamination_rate == 0.0
+    assert r.formatted_contamination_rate == "0.0%"
+
+
+def test_format_contamination_rate_small_nonzero() -> None:
+    assert format_contamination_rate(0.0) == "0.0%"
+    assert format_contamination_rate(-0.1) == "0.0%"
+    assert format_contamination_rate(0.5) == "50.0%"
+    assert format_contamination_rate(0.01) == "1.0%"
+    assert format_contamination_rate(0.001) == "0.1%"
+    # Small rates that would round to 0.0% with standard 1-decimal format
+    assert format_contamination_rate(1 / 15525) == "0.006%"
+    assert format_contamination_rate(2 / 15525) == "0.013%"
+    assert format_contamination_rate(1 / 10000) == "0.01%"
+
+
+def test_formatted_contamination_rate_never_zero_when_matches_exist(tmp_path: Path) -> None:
+    # 1 match out of 15525 eval samples
+    m = MatchRecord(
+        eval_index=42,
+        train_index=10,
+        eval_text="What is the capital of France?",
+        train_text="What is the capital of France?",
+        score=1.0,
+        method="exact",
+    )
+    report = ContaminationReport(
+        train_size=50000,
+        eval_size=15525,
+        threshold=0.85,
+        methods_used=["exact"],
+        matches=[m],
+    )
+    assert report.total_matches == 1
+    assert report.formatted_contamination_rate == "0.006%"
+    assert "0.0%" not in report.formatted_contamination_rate
+
+    # Summary text
+    summary_text = report.summary()
+    assert "0.006%" in summary_text
+    assert "(0.0%)" not in summary_text
+
+    # HTML output
+    html_path = str(tmp_path / "report.html")
+    report.to_html(html_path)
+    html_content = Path(html_path).read_text(encoding="utf-8")
+    assert "0.006%" in html_content
+    assert "Low Risk Contamination (0.006%)" in html_content
+    assert "Low Risk Contamination (0.0%)" not in html_content
+    assert "1 matching pair detected" in html_content
 
 
 def test_flagged_min_score(sample_report: ContaminationReport) -> None:
