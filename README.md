@@ -4,11 +4,11 @@
 
 **Data Contamination & Leakage Detection for AI / ML Workflows**
 
-[![PyPI Version](https://img.shields.io/badge/pypi-v0.4.0-blue.svg)](https://pypi.org/project/verascan/)
+[![PyPI Version](https://img.shields.io/badge/pypi-v0.4.1-blue.svg)](https://pypi.org/project/verascan/)
 [![CI](https://github.com/balamuruganpg/verascan/actions/workflows/ci.yml/badge.svg)](https://github.com/balamuruganpg/verascan/actions/workflows/ci.yml)
 [![Python Versions](https://img.shields.io/badge/python-3.9%20%7C%203.10%20%7C%203.11%20%7C%203.12-blue.svg)](https://pypi.org/project/verascan/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](https://github.com/balamuruganpg/verascan/blob/main/LICENSE)
-[![Tests](https://img.shields.io/badge/Tests-126%20passed-brightgreen.svg)](https://github.com/balamuruganpg/verascan/actions)
+[![Tests](https://img.shields.io/badge/Tests-136%20passed-brightgreen.svg)](https://github.com/balamuruganpg/verascan/actions)
 [![Type Checking](https://img.shields.io/badge/Typing-Strict-blue.svg)](https://mypy-lang.org/)
 [![Code Style](https://img.shields.io/badge/Code%20Style-Ruff-000000.svg)](https://github.com/astral-sh/ruff)
 
@@ -50,7 +50,7 @@ Data contamination occurs when evaluation or benchmark examples leak into a mode
 - **Leak-Free Dataset Splitting**: Proactively partition raw datasets into train and eval splits with 0.0% residual leakage (`verascan.split()` and CLI `verascan split`).
 - **Multi-Tier Detection**: Run exact, ngram, fuzzy, and semantic algorithms independently or in a cascaded pipeline.
 - **Cross-Method Deduplication**: Matches identified by earlier methods are automatically excluded from later passes to prevent double-counting.
-- **Multi-Format Ingestion**: Natively accepts `pandas.DataFrame`, `JSONL`, `CSV`, Hugging Face `datasets.Dataset`, and Python `list[str]`.
+- **Multi-Format Ingestion**: Natively accepts `pandas.DataFrame`, `JSONL`, `CSV`, Hugging Face `datasets.Dataset`, `list[str]`, and `list[dict]`.
 - **Interactive HTML Reports**: Generates self-contained, offline-ready HTML reports featuring live search, method filtering, and word-level diffs.
 - **Cleaned Eval Export**: Drop contaminated eval rows and write a reusable CSV/JSONL benchmark (`cleaned_eval()`, `to_cleaned()`, CLI `--output-cleaned`).
 - **CI/CD Integration**: CLI includes `--fail-above` to fail builds if contamination exceeds an allowed threshold.
@@ -312,7 +312,7 @@ The HTML report generated via `report.to_html("report.html")` is **100% self-con
 
 ```python
 train, eval = verascan.split(
-    data,  # str | pd.DataFrame | list[str] | Dataset
+    data,  # str | pd.DataFrame | list[str] | list[dict] | Dataset
     eval_size=0.2,  # float ratio (0-1) or int row count
     methods=["exact", "fuzzy"],  # exact, fuzzy, semantic
     threshold=0.85,  # similarity threshold (0-1)
@@ -328,7 +328,7 @@ train, eval = verascan.split(
 
 ```python
 report = verascan.audit(
-    train="train.jsonl",  # path, DataFrame, list[str], or Dataset
+    train="train.jsonl",  # path, DataFrame, list[str], list[dict], or Dataset
     benchmarks=["mmlu", "gsm8k", "humaneval"],  # preset names
     methods=["exact", "fuzzy"],  # exact, ngram, fuzzy, semantic
     threshold=0.85,  # similarity cutoff
@@ -346,6 +346,7 @@ report = verascan.check(train, eval)
 
 # Properties
 report.contamination_rate  # float: Fraction of eval examples found in train (0.0 to 1.0)
+report.formatted_contamination_rate  # str: Formatted rate (e.g. "0.006%", never "0.0%" if matches exist)
 report.total_matches  # int: Total flagged pairs
 report.exact_count  # int: Exact duplicate count
 report.ngram_count  # int: N-gram overlap match count
