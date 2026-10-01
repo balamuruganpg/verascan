@@ -72,6 +72,8 @@ Data contamination occurs when evaluation or benchmark examples leak into a mode
 
 ## 📦 Installation
 
+Verascan is available on PyPI at **https://pypi.org/project/verascan/**:
+
 ```bash
 # Core installation (exact + fuzzy matching + split utility)
 pip install verascan
@@ -142,6 +144,10 @@ report = verascan.audit(
 report.summary()
 report.to_html("audit_report.html")
 ```
+
+<p align="center">
+  <img src="assets/benchmark-audit-preview.png" alt="Verascan Benchmark Audit Report Preview" width="100%">
+</p>
 
 ---
 
@@ -303,6 +309,10 @@ The HTML report generated via `report.to_html("report.html")` is **100% self-con
 - **Live Search & Filtering**: Instant client-side search across text samples and index numbers.
 - **Word-Level Diffs**: Color-coded `<del>` and `<ins>` tags illustrating textual overlap.
 - **Responsive Layout**: Designed for seamless viewing across desktop monitors and mobile devices.
+
+<p align="center">
+  <img src="assets/diff-inspection-preview.png" alt="Verascan Word-Level Diff Inspection Preview" width="100%">
+</p>
 
 ---
 
