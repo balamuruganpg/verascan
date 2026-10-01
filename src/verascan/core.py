@@ -21,6 +21,12 @@ def check(
     methods: Sequence[str] | None = None,
     threshold: float = 0.85,
     column: str = "text",
+    train_split: str | None = None,
+    eval_split: str | None = None,
+    config: str | None = None,
+    train_config: str | None = None,
+    eval_config: str | None = None,
+    split: str | None = None,
     model_name: str = "all-MiniLM-L6-v2",
     batch_size: int = 64,
     num_perm: int = 128,
@@ -34,7 +40,7 @@ def check(
     ----------
     train, eval:
         Training / evaluation data. Accepts a file path (CSV / JSONL),
-        a :class:`pandas.DataFrame`, a ``list[str]``, or a HuggingFace Dataset.
+        a :class:`pandas.DataFrame`, a ``list[str]``, or a HuggingFace Dataset / dataset name.
     methods:
         Detection methods to run. Defaults to ``["exact", "fuzzy"]``.
         Add ``"ngram"`` for GPT-3-style 13-gram word overlap, or ``"semantic"``
@@ -42,7 +48,19 @@ def check(
     threshold:
         Similarity threshold for fuzzy and semantic methods (0 – 1).
     column:
-        Column name to extract text from (when inputs are DataFrames/CSVs/JSONL).
+        Column name to extract text from (when inputs are DataFrames/CSVs/JSONL/Datasets).
+    train_split:
+        Split to load when *train* is a Hugging Face dataset name (default: ``"train[:2000]"``).
+    eval_split:
+        Split to load when *eval* is a Hugging Face dataset name (default: ``"test"``).
+    config:
+        Hugging Face dataset configuration name applied to *train* and *eval*.
+    train_config:
+        Specific Hugging Face dataset configuration name for *train*.
+    eval_config:
+        Specific Hugging Face dataset configuration name for *eval*.
+    split:
+        Convenience alias for *train_split*.
     model_name:
         HuggingFace model name for semantic embeddings (default: ``"all-MiniLM-L6-v2"``).
     batch_size:
@@ -73,8 +91,24 @@ def check(
                 )
 
     # 1. Load texts (retain original eval rows for cleaned-eval export)
-    train_texts = load_texts(train, column=column)
-    eval_payload = load_eval_payload(eval, column=column)
+    effective_train_split = train_split if train_split is not None else split
+    effective_train_config = train_config if train_config is not None else config
+    effective_eval_config = eval_config if eval_config is not None else config
+
+    train_texts = load_texts(
+        train,
+        column=column,
+        split=effective_train_split,
+        config=effective_train_config,
+        default_split="train[:2000]",
+    )
+    eval_payload = load_eval_payload(
+        eval,
+        column=column,
+        split=eval_split,
+        config=effective_eval_config,
+        default_split="test",
+    )
     eval_texts = eval_payload.texts
 
     all_matches: list[MatchRecord] = []

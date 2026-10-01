@@ -4,11 +4,11 @@
 
 **Data Contamination & Leakage Detection for AI / ML Workflows**
 
-[![PyPI Version](https://img.shields.io/badge/pypi-v0.4.1-blue.svg)](https://pypi.org/project/verascan/)
+[![PyPI Version](https://img.shields.io/badge/pypi-v0.5.0-blue.svg)](https://pypi.org/project/verascan/)
 [![CI](https://github.com/balamuruganpg/verascan/actions/workflows/ci.yml/badge.svg)](https://github.com/balamuruganpg/verascan/actions/workflows/ci.yml)
 [![Python Versions](https://img.shields.io/badge/python-3.9%20%7C%203.10%20%7C%203.11%20%7C%203.12-blue.svg)](https://pypi.org/project/verascan/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](https://github.com/balamuruganpg/verascan/blob/main/LICENSE)
-[![Tests](https://img.shields.io/badge/Tests-136%20passed-brightgreen.svg)](https://github.com/balamuruganpg/verascan/actions)
+[![Tests](https://img.shields.io/badge/Tests-143%20passed-brightgreen.svg)](https://github.com/balamuruganpg/verascan/actions)
 [![Type Checking](https://img.shields.io/badge/Typing-Strict-blue.svg)](https://mypy-lang.org/)
 [![Code Style](https://img.shields.io/badge/Code%20Style-Ruff-000000.svg)](https://github.com/astral-sh/ruff)
 
@@ -237,12 +237,24 @@ train_df = pd.DataFrame({"prompt": ["Translate to French...", "Summarize..."]})
 eval_df = pd.DataFrame({"prompt": ["Translate to French..."]})
 report = verascan.check(train=train_df, eval=eval_df, column="prompt")
 
-# 4. Hugging Face Datasets
-from datasets import load_dataset
+# 4. Hugging Face Datasets (by name or Dataset object)
+# Direct dataset name string with custom splits & configs
+report = verascan.check(
+    train="gsm8k",
+    eval="gsm8k",
+    column="question",
+    train_split="train[:500]",
+    eval_split="test[:200]",
+    config="main",
+)
 
-train_ds = load_dataset("imdb", split="train")
-eval_ds = load_dataset("imdb", split="test")
-report = verascan.check(train=train_ds, eval=eval_ds, column="text")
+# Or audit directly against public benchmark presets
+audit_report = verascan.audit(
+    train="imdb",
+    benchmarks=["mmlu", "gsm8k"],
+    column="text",
+    split="train[:2000]",
+)
 ```
 
 ---

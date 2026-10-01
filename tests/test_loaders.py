@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any
 
 import pandas as pd
 import pytest
@@ -119,12 +120,153 @@ def test_file_not_found() -> None:
         load_texts("non_existent_file_12345.jsonl")
 
 
-def test_loader_dataset_name_string_error() -> None:
-    with pytest.raises(
-        FileNotFoundError,
-        match=r"Not a data file: 'imdb'\. Pass a file path, list\[str\], DataFrame, or Hugging Face Dataset object\.",
-    ):
+class _MockDataset:
+    def __init__(self, data: list[dict[str, Any]]) -> None:
+        self._data = data
+        self.column_names = list(data[0].keys()) if data else []
+
+    def __getitem__(self, key: str) -> list[Any]:
+        return [row[key] for row in self._data]
+
+    def __iter__(self) -> Any:
+        return iter(self._data)
+
+    def __len__(self) -> int:
+        return len(self._data)
+
+    def to_pandas(self) -> pd.DataFrame:
+        return pd.DataFrame(self._data)
+
+
+def test_load_dataset_by_name_train_default_split(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[tuple[str, Any, Any]] = []
+
+    def mock_load_dataset(name: str, *args: Any, **kwargs: Any) -> Any:
+        calls.append((name, args, kwargs))
+        return _MockDataset([{"text": "Sample 1", "label": 0}, {"text": "Sample 2", "label": 1}])
+
+    import datasets
+
+    monkeypatch.setattr(datasets, "load_dataset", mock_load_dataset)
+
+    texts = load_texts("imdb", column="text")
+    assert texts == ["Sample 1", "Sample 2"]
+    assert len(calls) == 1
+    assert calls[0][0] == "imdb"
+    assert calls[0][2].get("split") == "train[:2000]"
+
+
+def test_load_dataset_by_name_eval_default_split(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[tuple[str, Any, Any]] = []
+
+    def mock_load_dataset(name: str, *args: Any, **kwargs: Any) -> Any:
+        calls.append((name, args, kwargs))
+        return _MockDataset([{"text": "Eval sample"}])
+
+    import datasets
+
+    monkeypatch.setattr(datasets, "load_dataset", mock_load_dataset)
+
+    payload = load_eval_payload("imdb", column="text", default_split="test")
+    assert payload.texts == ["Eval sample"]
+    assert calls[0][2].get("split") == "test"
+
+
+def test_load_dataset_by_name_custom_split_and_config(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[tuple[str, Any, Any]] = []
+
+    def mock_load_dataset(name: str, *args: Any, **kwargs: Any) -> Any:
+        calls.append((name, args, kwargs))
+        return _MockDataset([{"question": "What is 1+1?", "answer": "2"}])
+
+    import datasets
+
+    monkeypatch.setattr(datasets, "load_dataset", mock_load_dataset)
+
+    payload = load_eval_payload("gsm8k", column="question", split="train[:500]", config="main")
+    assert payload.texts == ["What is 1+1?"]
+    assert calls[0][0] == "gsm8k"
+    assert calls[0][1] == ("main",)
+    assert calls[0][2].get("split") == "train[:500]"
+
+
+def test_load_dataset_missing_datasets_package(monkeypatch: pytest.MonkeyPatch) -> None:
+    import sys
+
+    monkeypatch.setitem(sys.modules, "datasets", None)
+    with pytest.raises(ImportError, match=r'pip install "verascan\[hf\]"'):
         load_texts("imdb")
+
+
+def test_load_dataset_neither_file_nor_loadable(monkeypatch: pytest.MonkeyPatch) -> None:
+    import datasets
+
+    def mock_load_dataset(name: str, *args: Any, **kwargs: Any) -> Any:
+        raise ValueError(f"Dataset '{name}' does not exist on Hugging Face hub")
+
+    monkeypatch.setattr(datasets, "load_dataset", mock_load_dataset)
+    with pytest.raises(
+        ValueError, match="Could not load 'not_a_real_dataset_123' as a Hugging Face dataset"
+    ):
+        load_texts("not_a_real_dataset_123")
+
+
+def test_check_with_dataset_names(monkeypatch: pytest.MonkeyPatch) -> None:
+    import datasets
+
+    import verascan
+
+    def mock_load_dataset(name: str, *args: Any, **kwargs: Any) -> Any:
+        split = kwargs.get("split")
+        if split == "train[:500]":
+            return _MockDataset(
+                [{"question": "How many clips?"}, {"question": "Unique train question."}]
+            )
+        if split == "test[:200]":
+            return _MockDataset(
+                [{"question": "How many clips?"}, {"question": "Unique eval question."}]
+            )
+        return _MockDataset([{"question": "Default"}])
+
+    monkeypatch.setattr(datasets, "load_dataset", mock_load_dataset)
+
+    report = verascan.check(
+        train="gsm8k",
+        eval="gsm8k",
+        column="question",
+        train_split="train[:500]",
+        eval_split="test[:200]",
+        config="main",
+        methods=["exact"],
+    )
+    assert report.total_matches == 1
+    assert report.matches[0].eval_text == "How many clips?"
+
+
+def test_audit_with_dataset_name(monkeypatch: pytest.MonkeyPatch) -> None:
+    import datasets
+
+    import verascan
+    from verascan.benchmarks import SYNTHETIC_BENCHMARKS
+
+    leak_text = SYNTHETIC_BENCHMARKS["gsm8k"][0]["question"]
+
+    def mock_load_dataset(name: str, *args: Any, **kwargs: Any) -> Any:
+        return _MockDataset(
+            [{"text": leak_text}, {"text": "A completely unrelated training sentence."}]
+        )
+
+    monkeypatch.setattr(datasets, "load_dataset", mock_load_dataset)
+
+    report = verascan.audit(
+        train="imdb",
+        benchmarks=["mmlu", "gsm8k"],
+        column="text",
+        split="train[:2000]",
+        synthetic=True,
+        methods=["exact"],
+    )
+    assert report.benchmark_counts["gsm8k"] >= 1
 
 
 def test_unsupported_extension(tmp_path: Path) -> None:

@@ -60,7 +60,6 @@ class SplitResult:
             "",
         ]
         text = "\n".join(lines)
-        print(text)
         return text
 
 
@@ -104,6 +103,8 @@ def split(
     methods: Sequence[str] | None = None,
     threshold: float = 0.85,
     column: str = "text",
+    split: str | None = None,
+    config: str | None = None,
     seed: int | None = 42,
     move_to: str = "train",
     output_train: str | None = None,
@@ -121,7 +122,7 @@ def split(
     ----------
     data:
         Input dataset. Accepts a file path (CSV or JSONL), a :class:`pandas.DataFrame`,
-        a ``list[str]``, or a HuggingFace Dataset.
+        a ``list[str]``, or a HuggingFace Dataset / dataset name.
     eval_size:
         Target evaluation ratio as a float between 0.0 and 1.0 (e.g. 0.2 for 20%),
         or an absolute number of evaluation rows as an integer.
@@ -132,6 +133,10 @@ def split(
         Similarity threshold for fuzzy and semantic methods (0 – 1).
     column:
         Name of the text column to evaluate.
+    split:
+        Split to load when *data* is a Hugging Face dataset name (default: ``"train[:2000]"``).
+    config:
+        Optional dataset configuration when *data* is a Hugging Face dataset name.
     seed:
         Random seed for shuffling before partition. Set to ``None`` for non-deterministic split.
     move_to:
@@ -170,7 +175,13 @@ def split(
             if m not in _VALID_METHODS:
                 raise ValueError(f"Unknown method '{m}'. Valid methods: {sorted(_VALID_METHODS)}")
 
-    payload = load_eval_payload(data, column=column)
+    payload = load_eval_payload(
+        data,
+        column=column,
+        split=split,
+        config=config,
+        default_split="train[:2000]",
+    )
     n = len(payload.texts)
 
     if n == 0:

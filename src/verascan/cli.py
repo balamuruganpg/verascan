@@ -62,6 +62,21 @@ def check(
         "--output-cleaned",
         help="Write decontaminated eval set to this path (.csv, .jsonl, or .json).",
     ),
+    train_split: str | None = typer.Option(
+        None,
+        "--train-split",
+        help="Hugging Face split for training data (default: train[:2000]).",
+    ),
+    eval_split: str | None = typer.Option(
+        None,
+        "--eval-split",
+        help="Hugging Face split for evaluation data (default: test).",
+    ),
+    config: str | None = typer.Option(
+        None,
+        "--config",
+        help="Hugging Face dataset configuration name.",
+    ),
     no_progress: bool = typer.Option(False, "--no-progress", help="Disable progress bars."),
 ) -> None:
     """Run a contamination check and print a summary."""
@@ -76,13 +91,16 @@ def check(
             methods=method_list,
             threshold=threshold,
             column=column,
+            train_split=train_split,
+            eval_split=eval_split,
+            config=config,
             show_progress=not no_progress,
         )
     except (FileNotFoundError, ValueError, KeyError) as exc:
         typer.secho(f"Error: {exc}", fg=typer.colors.RED, err=True)
         raise typer.Exit(code=2) from exc
 
-    report.summary()
+    typer.echo(report.summary())
 
     # Write output file if requested.
     if output:
@@ -234,6 +252,16 @@ def audit(
         "--synthetic",
         help="Use small synthetic stand-ins for testing (no Hugging Face download).",
     ),
+    split: str | None = typer.Option(
+        None,
+        "--split",
+        help="Hugging Face split for training data (default: train[:2000]).",
+    ),
+    config: str | None = typer.Option(
+        None,
+        "--config",
+        help="Hugging Face dataset configuration name for train data.",
+    ),
     no_progress: bool = typer.Option(False, "--no-progress", help="Disable progress bars."),
 ) -> None:
     """Audit a training dataset against popular public evaluation benchmarks."""
@@ -249,6 +277,8 @@ def audit(
             methods=method_list,
             threshold=threshold,
             column=column,
+            split=split,
+            config=config,
             synthetic=synthetic,
             show_progress=not no_progress,
         )
@@ -256,7 +286,7 @@ def audit(
         typer.secho(f"Error: {exc}", fg=typer.colors.RED, err=True)
         raise typer.Exit(code=2) from exc
 
-    report.summary()
+    typer.echo(report.summary())
 
     if output:
         if output.endswith(".html"):

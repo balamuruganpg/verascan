@@ -9,6 +9,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-10-01
+
+### Added
+- **Hugging Face Dataset Ingestion by Name**:
+  - Automatically load Hugging Face datasets when passing a dataset name string (e.g. `train="imdb"`, `train="gsm8k"`, or `train="openai/gsm8k"`).
+  - Safe default partition bounds: defaults to `train[:2000]` for training inputs and `test` for evaluation inputs to prevent accidental multi-gigabyte downloads.
+  - Granular split & configuration controls: `train_split`, `eval_split`, `split`, and `config` parameters in `verascan.check()`, `verascan.audit()`, `verascan.split()`, and the CLI.
+  - Helpful error messages: raises `ImportError: Install with pip install "verascan[hf]"` if the `datasets` dependency is missing, or a descriptive error when a dataset is unresolvable.
+  - Seamless interoperability: works identically across `verascan.check()`, `verascan.audit()`, and `verascan.split()` without breaking existing inputs (`list[str]`, `list[dict]`, `pandas.DataFrame`, `datasets.Dataset`, or local files).
+
+### Changed
+- **Silent Report Summary (`report.summary()`)**:
+  - `ContaminationReport.summary()`, `AuditReport.summary()`, and `SplitResult.summary()` now return the formatted summary string without writing to `stdout`.
+  - CLI commands (`verascan check`, `verascan audit`, `verascan split`) print the returned summary using `typer.echo`.
+
 ## [0.4.1] - 2026-09-24
 
 ### Fixed

@@ -136,7 +136,7 @@ class ContaminationReport:
     # ---- display -------------------------------------------------------- #
 
     def summary(self) -> str:
-        """Return a human-readable summary string and print it."""
+        """Return a human-readable summary string."""
         unique_eval = {m.eval_index for m in self.matches}
         lines = [
             "",
@@ -163,7 +163,6 @@ class ContaminationReport:
         lines.append("=" * 47)
         lines.append("")
         text = "\n".join(lines)
-        print(text)
         return text
 
     # ---- serialisation -------------------------------------------------- #

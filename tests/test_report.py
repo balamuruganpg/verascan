@@ -138,13 +138,43 @@ def test_counts(sample_report: ContaminationReport) -> None:
     assert sample_report.semantic_count == 0
 
 
-def test_summary_prints(
+def test_summary_does_not_print(
     sample_report: ContaminationReport, capsys: pytest.CaptureFixture[str]
 ) -> None:
     text = sample_report.summary()
     assert "30.0%" in text
+    assert "Verascan Contamination Report" in text
     captured = capsys.readouterr()
-    assert "Verascan" in captured.out
+    assert captured.out == ""
+    assert captured.err == ""
+
+
+def test_audit_report_summary_does_not_print(capsys: pytest.CaptureFixture[str]) -> None:
+    from verascan.audit import AuditReport
+
+    m = MatchRecord(
+        eval_index=0,
+        train_index=0,
+        eval_text="def foo(): pass",
+        train_text="def foo(): pass",
+        score=1.0,
+        method="exact",
+    )
+    report = AuditReport(
+        train_size=100,
+        eval_size=10,
+        threshold=0.85,
+        methods_used=["exact"],
+        matches=[m],
+        benchmarks=["humaneval"],
+        eval_records=[{"benchmark": "humaneval", "text": "def foo(): pass"}],
+    )
+    text = report.summary()
+    assert "Verascan Benchmark Audit Report" in text
+    assert "humaneval" in text
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert captured.err == ""
 
 
 def test_to_dict(sample_report: ContaminationReport) -> None:

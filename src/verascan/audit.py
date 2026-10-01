@@ -48,7 +48,7 @@ class AuditReport(ContaminationReport):
         return grouped
 
     def summary(self) -> str:
-        """Return a human-readable summary string and print it."""
+        """Return a human-readable summary string."""
         unique_eval = self.contaminated_indices()
         lines = [
             "",
@@ -85,7 +85,6 @@ class AuditReport(ContaminationReport):
         lines.append("=" * 47)
         lines.append("")
         text = "\n".join(lines)
-        print(text)
         return text
 
     def to_dict(self) -> dict[str, Any]:
@@ -108,7 +107,11 @@ def audit(
     methods: Sequence[str] | None = None,
     threshold: float = 0.85,
     column: str = "text",
-    split: str = "test",
+    split: str | None = None,
+    train_split: str | None = None,
+    config: str | None = None,
+    train_config: str | None = None,
+    benchmark_split: str = "test",
     synthetic: bool = False,
     allow_synthetic: bool = False,
     model_name: str = "all-MiniLM-L6-v2",
@@ -124,7 +127,7 @@ def audit(
     ----------
     train:
         Training data to scan. Accepts a file path (CSV or JSONL),
-        a :class:`pandas.DataFrame`, a ``list[str]``, or a HuggingFace Dataset.
+        a :class:`pandas.DataFrame`, a ``list[str]``, or a HuggingFace Dataset / dataset name.
     benchmarks:
         One or more benchmark preset names to check against.
         Supported presets: ``"mmlu"``, ``"gsm8k"``, ``"humaneval"``.
@@ -135,7 +138,15 @@ def audit(
     column:
         Column name in *train* to extract text from.
     split:
-        Split to evaluate for benchmark datasets (default: ``"test"``).
+        Split to evaluate. If starts with "train", applied to *train*; otherwise applied to benchmark presets.
+    train_split:
+        Specific split to load when *train* is a Hugging Face dataset name.
+    config:
+        Dataset configuration name when *train* is a Hugging Face dataset name.
+    train_config:
+        Specific configuration name for *train*.
+    benchmark_split:
+        Split for benchmark presets (default: ``"test"``).
     synthetic:
         If True, use synthetic stand-ins for offline / fast testing.
     allow_synthetic:
@@ -160,11 +171,28 @@ def audit(
     """
     normalized_bms = normalize_benchmarks(benchmarks)
 
+    # Determine train split vs benchmark split
+    if train_split is not None:
+        eff_train_split = train_split
+        eff_bm_split = benchmark_split if benchmark_split != "test" else (split or "test")
+    elif split is not None:
+        if "train" in split or split not in {"test", "validation", "dev"}:
+            eff_train_split = split
+            eff_bm_split = benchmark_split
+        else:
+            eff_train_split = None
+            eff_bm_split = split
+    else:
+        eff_train_split = None
+        eff_bm_split = benchmark_split
+
+    eff_train_config = train_config if train_config is not None else config
+
     all_records: list[dict[str, Any]] = []
     for bm_name in normalized_bms:
         records = load_benchmark(
             bm_name,
-            split=split,
+            split=eff_bm_split,
             synthetic=synthetic,
             allow_synthetic=allow_synthetic,
         )
@@ -180,6 +208,8 @@ def audit(
         methods=methods,
         threshold=threshold,
         column=column,
+        train_split=eff_train_split,
+        config=eff_train_config,
         model_name=model_name,
         batch_size=batch_size,
         num_perm=num_perm,

@@ -99,7 +99,48 @@ def _load_hf_dataset(ds: Any, column: str) -> list[str]:
     return [str(x) for x in ds[column]]
 
 
-def load_eval_payload(source: DataInput, *, column: str = "text") -> LoadedEval:
+def _is_file_path_syntax(source: str) -> bool:
+    """Check if *source* syntax indicates it was intended as a local file path."""
+    p = Path(source)
+    if source.startswith(("./", ".\\", "../", "..\\", "/", "\\")) or p.is_absolute():
+        return True
+    return p.suffix.lower() in {".csv", ".jsonl", ".json", ".tsv", ".parquet", ".txt"}
+
+
+def _process_hf_dataset(ds: Any, column: str) -> LoadedEval:
+    """Extract texts and tabular records from a Hugging Face Dataset or DatasetDict."""
+    if hasattr(ds, "keys") and not hasattr(ds, "column_names"):
+        if "train" in ds:
+            ds = ds["train"]
+        elif "test" in ds:
+            ds = ds["test"]
+        else:
+            first_key = next(iter(ds.keys()))
+            ds = ds[first_key]
+
+    texts = _load_hf_dataset(ds, column)
+    if hasattr(ds, "to_pandas"):
+        frame = ds.to_pandas()
+        return LoadedEval(
+            texts=texts,
+            records=cast(list[dict[str, Any]], frame.to_dict(orient="records")),
+            columns=list(frame.columns),
+        )
+    return LoadedEval(
+        texts=texts,
+        records=[{column: text} for text in texts],
+        columns=list(getattr(ds, "column_names", [column])),
+    )
+
+
+def load_eval_payload(
+    source: DataInput,
+    *,
+    column: str = "text",
+    split: str | None = None,
+    config: str | None = None,
+    default_split: str = "train[:2000]",
+) -> LoadedEval:
     """Load *source* as texts plus original records (when tabular).
 
     Returns a :class:`LoadedEval`. ``records`` / ``columns`` are ``None`` when
@@ -147,43 +188,58 @@ def load_eval_payload(source: DataInput, *, column: str = "text") -> LoadedEval:
     # --- HuggingFace Dataset (optional) -----------------------------------
     hf_type = _get_hf_dataset_type()
     if hf_type is not None and isinstance(source, hf_type):
-        texts = _load_hf_dataset(source, column)
-        if hasattr(source, "to_pandas"):
-            frame = source.to_pandas()
-            return LoadedEval(
-                texts=texts,
-                records=cast(list[dict[str, Any]], frame.to_dict(orient="records")),
-                columns=list(frame.columns),
-            )
-        return LoadedEval(
-            texts=texts,
-            records=[{column: text} for text in texts],
-            columns=list(getattr(source, "column_names", [column])),
-        )
+        return _process_hf_dataset(source, column)
 
-    # --- file path --------------------------------------------------------
+    # --- file path or HuggingFace dataset name ----------------------------
     if isinstance(source, (str, os.PathLike)):
         path = str(source)
-        if not Path(path).exists():
+        path_obj = Path(path)
+
+        # Existing local file
+        if path_obj.exists() and path_obj.is_file():
+            ext = path_obj.suffix.lower()
+            if ext == ".csv":
+                df = _load_csv(path, column)
+                return LoadedEval(
+                    texts=df[column].astype(str).tolist(),
+                    records=cast(list[dict[str, Any]], df.to_dict(orient="records")),
+                    columns=list(df.columns),
+                )
+            if ext in {".jsonl", ".json"}:
+                return _load_jsonl_payload(path, column)
+
+            raise ValueError(
+                f"Unsupported file extension '{ext}' for '{path}'. Supported: .csv, .jsonl, .json"
+            )
+
+        # Non-existent file path syntax
+        if _is_file_path_syntax(path):
             raise FileNotFoundError(
                 f"Not a data file: '{path}'. "
                 f"Pass a file path, list[str], DataFrame, or Hugging Face Dataset object."
             )
 
-        ext = Path(path).suffix.lower()
-        if ext == ".csv":
-            df = _load_csv(path, column)
-            return LoadedEval(
-                texts=df[column].astype(str).tolist(),
-                records=cast(list[dict[str, Any]], df.to_dict(orient="records")),
-                columns=list(df.columns),
-            )
-        if ext in {".jsonl", ".json"}:
-            return _load_jsonl_payload(path, column)
+        # Non-file string: attempt Hugging Face dataset load
+        try:
+            from datasets import load_dataset  # type: ignore[import-untyped]
+        except ImportError as exc:
+            raise ImportError(
+                f"Cannot load dataset '{path}': datasets library is not installed. "
+                'Install with pip install "verascan[hf]".'
+            ) from exc
 
-        raise ValueError(
-            f"Unsupported file extension '{ext}' for '{path}'. Supported: .csv, .jsonl, .json"
-        )
+        target_split = split if split is not None else default_split
+        try:
+            if config:
+                ds = load_dataset(path, config, split=target_split)
+            else:
+                ds = load_dataset(path, split=target_split)
+        except Exception as exc:
+            raise ValueError(
+                f"Could not load '{path}' as a Hugging Face dataset (and it is not an existing local file): {exc}"
+            ) from exc
+
+        return _process_hf_dataset(ds, column)
 
     raise TypeError(
         f"Unsupported data source type: {type(source).__name__}. "
@@ -192,7 +248,14 @@ def load_eval_payload(source: DataInput, *, column: str = "text") -> LoadedEval:
     )
 
 
-def load_texts(source: DataInput, *, column: str = "text") -> list[str]:
+def load_texts(
+    source: DataInput,
+    *,
+    column: str = "text",
+    split: str | None = None,
+    config: str | None = None,
+    default_split: str = "train[:2000]",
+) -> list[str]:
     """Load *source* and return a flat list of text strings.
 
     Parameters
@@ -203,21 +266,24 @@ def load_texts(source: DataInput, *, column: str = "text") -> list[str]:
         - a ``list[str]``
         - a :class:`pandas.DataFrame` containing a text column
         - a file path ending in ``.csv`` or ``.jsonl``
-        - a HuggingFace ``datasets.Dataset``
+        - a HuggingFace ``datasets.Dataset`` or dataset name string
     column:
         Name of the text column to extract (used for DataFrames / Datasets / CSV / JSONL).
+    split:
+        Split to load when *source* is a Hugging Face dataset name.
+    config:
+        Optional dataset configuration when *source* is a Hugging Face dataset name.
+    default_split:
+        Default split to use if *split* is not provided (default: ``"train[:2000]"``).
 
     Returns
     -------
     list[str]
-
-    Raises
-    ------
-    KeyError
-        If the requested *column* does not exist in the source.
-    FileNotFoundError
-        If *source* is a path that does not exist.
-    ValueError
-        If *source* is an unsupported type or file format.
     """
-    return load_eval_payload(source, column=column).texts
+    return load_eval_payload(
+        source,
+        column=column,
+        split=split,
+        config=config,
+        default_split=default_split,
+    ).texts
