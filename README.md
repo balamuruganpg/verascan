@@ -4,7 +4,7 @@
 
 <p align="center">
   <a href="https://pypi.org/project/verascan/"><img src="https://img.shields.io/pypi/v/verascan?color=111111&amp;label=PyPI" alt="Latest published PyPI version"></a>
-  <a href="https://github.com/balamuruganpg/verascan/actions/workflows/ci.yml"><img src="https://github.com/balamuruganpg/verascan/actions/workflows/ci.yml/badge.svg" alt="Continuous integration"></a>
+  <a href="https://github.com/balamuruganpg/verascan/actions/workflows/ci.yml?query=branch%3Amain+event%3Apush"><img src="https://github.com/balamuruganpg/verascan/actions/workflows/ci.yml/badge.svg?branch=main&amp;event=push" alt="Continuous integration on main"></a>
   <a href="https://pypi.org/project/verascan/"><img src="https://img.shields.io/badge/Python-3.9%2B-444444" alt="Python 3.9 and later; dashboard requires Python 3.11 and later"></a>
   <a href="https://github.com/balamuruganpg/verascan/blob/main/LICENSE"><img src="https://img.shields.io/badge/License-MIT-444444" alt="MIT license"></a>
 </p>
