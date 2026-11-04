@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="350" viewBox="0 0 1440 350" role="img" aria-labelledby="title desc">
+  <title id="title">From your datasets to reviewable evidence</title>
+  <desc id="desc">Load training and evaluation data, compare with exact, n-gram, fuzzy or semantic detection, and review results in PDF, JSON and the dashboard.</desc>
+  <rect x="1" y="1" width="1438" height="348" rx="22" fill="#fafafa" stroke="#e5e5e5"/>
+  <g font-family="Arial,Helvetica,sans-serif">
+    <text x="45" y="48" fill="#777" font-size="11" letter-spacing="2">FROM DATA TO EVIDENCE</text>
+    <g transform="translate(44 78)">
+      <rect width="390" height="225" rx="15" fill="#fff" stroke="#ddd"/>
+      <text x="25" y="39" fill="#999" font-size="12" letter-spacing="1.5">01 / LOAD</text>
+      <text x="25" y="83" fill="#111" font-size="29" font-weight="600" letter-spacing="-.8">Bring your data.</text>
+      <text x="25" y="122" fill="#666" font-size="17">Training + evaluation sets</text>
+      <text x="25" y="150" fill="#666" font-size="17">or public benchmark presets.</text>
+      <path d="M25 172h340" stroke="#e8e8e8"/>
+      <text x="25" y="200" fill="#777" font-size="13">CSV · JSONL · DataFrames · Hugging Face</text>
+    </g>
+    <g transform="translate(525 78)">
+      <rect width="390" height="225" rx="15" fill="#111"/>
+      <text x="25" y="39" fill="#999" font-size="12" letter-spacing="1.5">02 / COMPARE</text>
+      <text x="25" y="83" fill="#fff" font-size="29" font-weight="600" letter-spacing="-.8">Find the overlap.</text>
+      <text x="25" y="122" fill="#bbb" font-size="17">Exact, n-gram, fuzzy and semantic</text>
+      <text x="25" y="150" fill="#bbb" font-size="17">matching for different kinds of leakage.</text>
+      <path d="M25 172h340" stroke="#333"/>
+      <text x="25" y="200" fill="#aaa" font-size="13">CPU checks · Dedicated CUDA audits</text>
+    </g>
+    <g transform="translate(1006 78)">
+      <rect width="390" height="225" rx="15" fill="#fff" stroke="#ddd"/>
+      <text x="25" y="39" fill="#999" font-size="12" letter-spacing="1.5">03 / REVIEW</text>
+      <text x="25" y="83" fill="#111" font-size="29" font-weight="600" letter-spacing="-.8">Inspect. Then share.</text>
+      <text x="25" y="122" fill="#666" font-size="17">Trace matches back to their source.</text>
+      <text x="25" y="150" fill="#666" font-size="17">Export the evidence and cleaned data.</text>
+      <path d="M25 172h340" stroke="#e8e8e8"/>
+      <text x="25" y="200" fill="#777" font-size="13">PDF · JSON · Local interactive dashboard</text>
+    </g>
+    <g fill="none" stroke="#777" stroke-width="2"><path d="M456 191h46m-9-8 9 8-9 8M937 191h46m-9-8 9 8-9 8"/></g>
+  </g>
+</svg>

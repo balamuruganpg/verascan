@@ -1,144 +1,185 @@
-<div align="center">
+<p align="center">
+  <img src="screenshots/verascan-banner.svg" alt="Verascan 0.6.0 — Know what overlaps. See the evidence." width="100%">
+</p>
+
+<p align="center">
+  <a href="https://pypi.org/project/verascan/"><img src="https://img.shields.io/pypi/v/verascan?color=111111&amp;label=PyPI" alt="Latest published PyPI version"></a>
+  <a href="https://github.com/balamuruganpg/verascan/actions/workflows/ci.yml"><img src="https://github.com/balamuruganpg/verascan/actions/workflows/ci.yml/badge.svg" alt="Continuous integration"></a>
+  <a href="https://pypi.org/project/verascan/"><img src="https://img.shields.io/badge/Python-3.9%2B-444444" alt="Python 3.9 and later; dashboard requires Python 3.11 and later"></a>
+  <a href="https://github.com/balamuruganpg/verascan/blob/main/LICENSE"><img src="https://img.shields.io/badge/License-MIT-444444" alt="MIT license"></a>
+</p>
+
+<p align="center">
+  <a href="#quick-start">Quick start</a> ·
+  <a href="#nvidia-gpu-audits">GPU audits</a> ·
+  <a href="#the-report-workspace">Dashboard</a> ·
+  <a href="#python-api">Python API</a> ·
+  <a href="https://github.com/balamuruganpg/verascan/blob/main/CHANGELOG.md">Changelog</a>
+</p>
 
 # Verascan
 
-**Data Contamination & Leakage Detection for AI / ML Workflows**
+**Find training–evaluation overlap. Investigate every match. Share the evidence.**
 
-[![PyPI Version](https://img.shields.io/badge/pypi-v0.5.0-blue.svg)](https://pypi.org/project/verascan/)
-[![CI](https://github.com/balamuruganpg/verascan/actions/workflows/ci.yml/badge.svg)](https://github.com/balamuruganpg/verascan/actions/workflows/ci.yml)
-[![Python Versions](https://img.shields.io/badge/python-3.9%20%7C%203.10%20%7C%203.11%20%7C%203.12-blue.svg)](https://pypi.org/project/verascan/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](https://github.com/balamuruganpg/verascan/blob/main/LICENSE)
-[![Tests](https://img.shields.io/badge/Tests-pytest-brightgreen.svg)](https://github.com/balamuruganpg/verascan/actions)
-[![Type Checking](https://img.shields.io/badge/Typing-Strict-blue.svg)](https://mypy-lang.org/)
-[![Code Style](https://img.shields.io/badge/Code%20Style-Ruff-000000.svg)](https://github.com/astral-sh/ruff)
+Verascan detects exact duplicates, shared passages, near-duplicates and semantic
+overlap between training data and evaluation examples. Use it to check dataset
+splits, audit public benchmarks, inspect matching text, and export reviewable
+reports before trusting an evaluation result.
 
-<br>
+**0.6.0 brings dedicated NVIDIA CUDA auditing, PDF reports, and a local dashboard
+with black and white themes.** JSON remains the machine-readable record behind
+the reporting workflow.
 
-<p align="center">
-  <strong>Detect exact, n-gram, fuzzy, and semantic data leakage between training and evaluation datasets.</strong><br>
-  Built for LLM fine-tuning, benchmark integrity, RAG validation, and synthetic data auditing.
-</p>
+![Verascan dark dashboard showing the contamination status and audit overview](screenshots/dashboard-overview.jpg)
 
-<br>
+*Dashboard demo with five planted matches. The percentage illustrates the demo
+dataset; it is not a measurement of a public training corpus.*
 
-<p align="center">NVIDIA CUDA benchmark auditing. PDF reports for sharing. A local dashboard for investigation.</p>
+## From datasets to evidence
 
-</div>
+![Load datasets, compare for overlap, and review PDF, JSON and dashboard reports](screenshots/audit-workflow.svg)
 
----
+| Task | What you get |
+| --- | --- |
+| **Check existing splits** | Exact, n-gram, fuzzy and semantic detection with source row indices and scores. |
+| **Audit benchmarks** | Compare training data against MMLU, GSM8K and HumanEval presets. |
+| **Use NVIDIA CUDA** | Batched CUDA embeddings, GPU-preferred FAISS indexing, device diagnostics and row limits. |
+| **Review the evidence** | Searchable pairs, method/benchmark/score filters, side-by-side text and word differences. |
+| **Share results** | Multi-page PDF reports and JSON exports; legacy self-contained HTML is also supported. |
+| **Prepare cleaner data** | Export flagged or cleaned evaluation rows, or create splits while filtering detected overlap. |
 
-## 🎯 Overview
+## Quick start
 
-Data contamination occurs when evaluation or benchmark examples leak into a model's training data. This compromises evaluation validity, inflates benchmark scores, and masks real-world model degradation.
-
-**Verascan** provides an end-to-end contamination detection and prevention pipeline:
-1. **Prevention (`verascan.split`)** — Partition raw datasets into train and eval splits with a mathematical guarantee of zero exact, fuzzy, or semantic leakage.
-2. **Benchmark Audit (`verascan.audit`)** — Audit training data against popular public benchmarks (`mmlu`, `gsm8k`, `humaneval`).
-3. **Contamination Audit (`verascan.check`)** — Multi-tier contamination scanner across existing splits:
-   - **Exact match** — $O(N)$ hash-based verbatim duplicate detection with normalisation.
-   - **N-gram overlap** — GPT-3-style word 13-gram collisions (Brown et al., 2020) with frequency filtering.
-   - **Fuzzy match** — MinHash + Locality-Sensitive Hashing (LSH) for near-duplicates and minor edits.
-   - **Semantic match** — Dense embedding similarity search (`sentence-transformers` + FAISS) for paraphrased content.
-4. **Remediation (`report.cleaned_eval` / `to_cleaned`)** — Automatically drop contaminated rows and export a pristine benchmark.
-
----
-
-## ✨ Features
-
-- **Leak-Free Dataset Splitting**: Proactively partition raw datasets into train and eval splits with 0.0% residual leakage (`verascan.split()` and CLI `verascan split`).
-- **Multi-Tier Detection**: Run exact, ngram, fuzzy, and semantic algorithms independently or in a cascaded pipeline.
-- **Cross-Method Deduplication**: Matches identified by earlier methods are automatically excluded from later passes to prevent double-counting.
-- **Multi-Format Ingestion**: Natively accepts `pandas.DataFrame`, `JSONL`, `CSV`, Hugging Face `datasets.Dataset`, `list[str]`, and `list[dict]`.
-- **NVIDIA GPU Audits**: Dedicated CUDA embedding path with GPU-preferred FAISS, batched indexing/search, device diagnostics, and controlled row limits.
-- **PDF Reports and Dashboard**: Share paginated PDF summaries, match tables, and highlighted word differences; investigate JSON reports with a local Streamlit dashboard, charts, search, and filters. Legacy self-contained HTML remains available.
-- **Cleaned Eval Export**: Drop contaminated eval rows and write a reusable CSV/JSONL benchmark (`cleaned_eval()`, `to_cleaned()`, CLI `--output-cleaned`).
-- **CI/CD Integration**: CLI includes `--fail-above` to fail builds if contamination exceeds an allowed threshold.
-- **Lightweight Core**: Installs cleanly with minimal dependencies; heavy ML dependencies (`sentence-transformers`, `faiss-cpu`) are optional extras.
-- **Noise-Free Execution**: Built-in log suppression prevents noisy C++/oneDNN and framework deprecation logs from polluting `stderr`.
-
----
-
-## 🔬 Detection Engines
-
-| Method | Algorithm | Complexity / Speed | Best For |
-|---|---|---|---|
-| **`exact`** | SHA-256 Content Hashing (normalised) | $O(N + M)$ &bull; *Microseconds* | Verbatim duplicates, casing/whitespace variations |
-| **`ngram`** | Word *n*-gram overlap (GPT-3 / Brown et al.) | $O(N + M)$ &bull; *Milliseconds* | Long shared phrases; classic 13-gram contamination |
-| **`fuzzy`** | MinHash + LSH (`datasketch`) | $O(N + M)$ &bull; *Milliseconds* | Minor edits, word insertions/deletions, truncations |
-| **`semantic`** | Dense Vector Cosine Similarity (FAISS) | $O(M \cdot d)$ &bull; *Seconds* | Paraphrased sentences, reworded questions, synonyms |
-
----
-
-## 📦 Installation
-
-Verascan is available on PyPI at **https://pypi.org/project/verascan/**:
+Install the dashboard workflow on **Python 3.11+**:
 
 ```bash
-# Core installation (exact + fuzzy matching + split utility)
-pip install verascan
-
-# With semantic similarity matching (sentence-transformers + FAISS)
-pip install "verascan[semantic]"
-
-# With Hugging Face datasets support
-pip install "verascan[hf]"
-
-# CPU semantic + Hugging Face extras (GPU and dashboard are separate)
-pip install "verascan[all]"
-
-# NVIDIA GPU auditing (also includes Hugging Face dataset support)
-pip install "verascan[gpu]"
-
-# Local interactive report dashboard (Python 3.11+)
 pip install "verascan[dashboard]"
 ```
 
-PDF export is included in the core installation. GPU auditing needs an NVIDIA
-driver and a **CUDA-enabled PyTorch build**. Follow the
-[PyTorch installation selector](https://pytorch.org/get-started/locally/) for your
-OS and CUDA runtime; a CPU-only PyTorch install cannot run `gpu_audit`.
+Run a small check and save both report formats:
 
-The GPU extra requests `sentence-transformers`, `torch`, `datasets`, and a
-platform-selected FAISS package. **Linux x86-64 uses `faiss-gpu`; Windows and
-other platforms use `faiss-cpu`** because NVIDIA FAISS-GPU wheels are not
-universally available. On Windows, embeddings run on CUDA while the index uses
-the documented FAISS-CPU fallback, with a visible warning.
+```python
+import verascan
 
-An installed CPU-only PyTorch build already satisfies `torch>=2.0`; installing
-the GPU extra does **not** automatically replace it with a CUDA build. For
-example, this Windows/Python 3.11 setup explicitly selects PyTorch 2.8 with CUDA
-12.6 (an NVIDIA driver compatible with CUDA 12.6 is required):
+report = verascan.check(
+    train=["The capital of France is Paris.", "A separate training example."],
+    eval=["The capital of France is Paris.", "An unseen evaluation example."],
+    methods=["exact", "fuzzy"],
+)
+
+print(report.summary())
+report.to_pdf("report.pdf")
+report.to_json("report.json")
+```
+
+Open the report workspace:
+
+```bash
+verascan dashboard report.json
+```
+
+Or explore all the review tools with five planted pairs, without running an audit:
+
+```bash
+verascan dashboard report.json --demo
+```
+
+Demo mode uses separate sample data and leaves your report unchanged. The server
+runs locally on `127.0.0.1`; stop it with **Ctrl+C**.
+
+## The report workspace
+
+Start with the contamination rate, then follow the result down to individual text
+pairs. The rate counts **unique flagged evaluation examples**, not matching pairs.
+Exact flagged/total counts appear alongside the percentage.
+
+### Black or white. The same evidence.
+
+Use **Light mode** in the header to change themes. Your filters and selected pair
+stay in place. Status uses green, amber or red; charts, controls and text review
+stay monochrome.
+
+<table width="100%">
+  <thead><tr><th>Dark theme</th><th>Light theme</th></tr></thead>
+  <tbody><tr>
+    <td width="50%"><a href="screenshots/screencapture-127-0-0-1-8501-2026-11-04-18_23_11.png"><img src="screenshots/screencapture-127-0-0-1-8501-2026-11-04-18_23_11.png" alt="Full-page Verascan dark-theme dashboard with planted matches, charts, filters and text comparison" width="100%"></a></td>
+    <td width="50%"><a href="screenshots/screencapture-127-0-0-1-8501-2026-11-04-18_19_33.png"><img src="screenshots/screencapture-127-0-0-1-8501-2026-11-04-18_19_33.png" alt="Full-page Verascan light-theme dashboard showing the same planted matches and review tools" width="100%"></a></td>
+  </tr></tbody>
+</table>
+
+*Full-page demo captures. Open either image to inspect it at full resolution.*
+
+### Understand where matches come from
+
+Method and benchmark charts appear when a report contains matches. Clean reports
+show a completion panel and audit scope instead of empty charts.
+
+![Matching pairs grouped by detection method and benchmark in the dashboard](screenshots/dashboard-charts.jpg)
+
+The status labels are display categories: **Clean = 0%**, **Low < 5%**, and
+**High ≥ 5%**. They are not statistical confidence estimates. Percentages display
+up to six decimal places, using scientific notation for smaller nonzero rates.
+
+### Inspect a pair, not just a number
+
+Filter by method, benchmark and minimum similarity; search the training and
+evaluation text literally. Review 25 pairs per page, select a pair, and compare
+its original text side by side. Strikethrough identifies words removed from
+training text; underline identifies words added in evaluation text.
+
+![Filtered semantic match with its score, benchmark, side-by-side source text and word-level differences](screenshots/dashboard-match-review.jpg)
+
+*Demo evidence. Similarity is a reason to investigate a pair, not proof that a
+model was trained on an evaluation example.*
+
+## Installation options
+
+The core package supports **Python 3.9+**. The optional dashboard requires
+**Python 3.11+**. PDF export is included in the core installation.
+
+| Install | Includes |
+| --- | --- |
+| `pip install verascan` | Core matching, dataset splitting, PDF, JSON and HTML export. |
+| `pip install "verascan[semantic]"` | Sentence-transformer embeddings and FAISS-CPU. |
+| `pip install "verascan[hf]"` | Hugging Face datasets by name or Dataset object. |
+| `pip install "verascan[all]"` | CPU semantic and Hugging Face extras. |
+| `pip install "verascan[gpu]"` | CUDA audit dependencies and Hugging Face support. |
+| `pip install "verascan[dashboard]"` | The local Streamlit report workspace. |
+| `pip install "verascan[gpu,dashboard]"` | GPU auditing and the dashboard workflow. |
+
+The `all` extra covers CPU semantic and Hugging Face support; GPU and dashboard
+extras are selected separately.
+
+## NVIDIA GPU audits
+
+GPU auditing requires an NVIDIA driver and a **CUDA-enabled PyTorch build**.
+Choose the build for your OS and driver using the
+[official PyTorch installer](https://pytorch.org/get-started/locally/).
+Installing the GPU extra alone does not replace an existing CPU-only PyTorch build.
+
+```bash
+pip install "verascan[gpu,dashboard]"
+```
+
+For example, on the tested Windows/Python 3.11 setup with a compatible NVIDIA
+driver, PyTorch 2.8 with CUDA 12.6 can be selected explicitly:
 
 ```powershell
-python -m pip install -e ".[gpu,dashboard]"
 python -m pip install "torch==2.8.0+cu126" --index-url https://download.pytorch.org/whl/cu126
 python -c "import torch; print(torch.__version__, torch.version.cuda, torch.cuda.is_available())"
 ```
 
-Use the [official PyTorch version instructions](https://pytorch.org/get-started/previous-versions/)
-when selecting a different version or CUDA runtime. `nvidia-smi` detects the
-driver/GPU; `torch.cuda.is_available()` verifies that Python can actually use it.
+Use the [official version instructions](https://pytorch.org/get-started/previous-versions/)
+when choosing a different PyTorch or CUDA version.
 
-For full FAISS-GPU indexing, use a compatible Linux setup following
-[FAISS installation instructions](https://github.com/facebookresearch/faiss/blob/main/INSTALL.md)
-(for example, WSL2/Linux with a compatible Conda build). If pip cannot resolve
-the Linux wheel, install FAISS-GPU separately, then install Verascan and
-the remaining dependencies in that same environment:
+### Run a controlled benchmark audit
 
 ```bash
-pip install "verascan[hf]" sentence-transformers
-# Install CUDA-enabled torch using the PyTorch selector above.
-# Install FAISS-GPU using the FAISS instructions above.
+verascan gpu --train imdb --benchmarks mmlu,gsm8k --column text --device cuda --batch-size 64 --max-train 2000 --max-eval 200 --output report.pdf --output-json report.json
+verascan dashboard report.json
 ```
 
-For CUDA embeddings with a CPU FAISS index, install
-`pip install "verascan[semantic,hf]"` and CUDA-enabled PyTorch instead.
-Verascan first attempts a GPU index; an unavailable or failing GPU index emits
-a warning and retries on FAISS-CPU. **Embeddings remain on CUDA**. Missing CUDA
-is an error, never a silent switch to CPU embeddings. Avoid installing
-`faiss-cpu` and `faiss-gpu` together: both provide the `faiss` module.
-
-## NVIDIA GPU benchmark audits (0.6.0)
+Or use the Python API:
 
 ```python
 import verascan
@@ -149,433 +190,186 @@ report = verascan.gpu_audit(
     column="text",
     device="cuda",
     batch_size=64,
-    max_train=10000,
-    max_eval=1000,
+    max_train=2000,
+    max_eval=200,
 )
-print(report.summary())
 report.to_pdf("report.pdf")
 report.to_json("report.json")
 ```
 
-```bash
-verascan gpu --train imdb --benchmarks mmlu,gsm8k --column text --device cuda --batch-size 64 --output report.pdf --output-json report.json
+- The command prints the device, CUDA runtime and free/total memory before loading data.
+- Embedding, indexing and search run in batches with progress bars. The GPU default
+  is **256**; lower `--batch-size` when device memory is limited.
+- `--max-train` bounds training rows; `--max-eval` bounds rows **per benchmark**.
+  Without limits, the GPU path uses the full training split.
+- GPU audits use semantic matching and retain up to **10 nearest training
+  neighbors per evaluation row**, filtered by `--threshold` (default `0.85`).
+- `--device cuda:N`, `--train-split`, `--benchmark-split`, `--config` and
+  `--model-name` control the device, dataset partitions and embedding model.
+- `--no-progress` disables progress bars. Dataset text, the index and retained
+  matches must still fit memory; batching does not make total memory unbounded.
 
-# Larger runs, with explicit row limits and a selected GPU
-verascan gpu --train imdb --benchmarks mmlu,gsm8k,humaneval --device cuda:0 --batch-size 256 --max-train 10000 --max-eval 1000 --output report.pdf --output-json report.json
+### FAISS platform behavior
 
-verascan dashboard report.json
-```
+| Environment | Embeddings | Index |
+| --- | --- | --- |
+| Compatible FAISS-GPU installation | NVIDIA CUDA | GPU preferred; CPU fallback after index failure. |
+| Windows or another platform using FAISS-CPU | NVIDIA CUDA | CPU index with one clear availability notice. |
+| CUDA unavailable or CPU-only PyTorch | Audit stops with an installation diagnostic. | No silent CPU embedding fallback. |
 
-The GPU command prints the selected device, CUDA runtime, and free/total memory
-before loading datasets. GPU batches default to **256**; reduce `--batch-size`
-if CUDA memory is exhausted. Progress bars cover training embedding/indexing
-and evaluation embedding/search; `--no-progress` disables them.
+The GPU extra selects `faiss-gpu` on Linux x86-64 and `faiss-cpu` on other
+platforms. If a compatible Linux wheel is unavailable, follow the
+[FAISS installation instructions](https://github.com/facebookresearch/faiss/blob/main/INSTALL.md)
+for a suitable GPU build, then install the remaining dependencies in that
+environment. Do not install FAISS-CPU and FAISS-GPU together: both provide `faiss`.
 
-GPU audits run semantic matching and retain up to **10 nearest training
-neighbors per evaluation row**, filtered by `--threshold` (default 0.85).
-`--max-train` limits training rows, and `--max-eval` limits rows **per benchmark**.
-Without limits, the GPU path uses the full training split. HF limits are passed
-as split slices when possible; local files and dataset objects are loaded before
-slicing. Batching bounds temporary embedding memory; the dataset texts, index,
-and result pairs must still fit memory. A FAISS fallback may re-encode training
-batches to rebuild the CPU index. Use `--train-split`, `--benchmark-split`, and
-`--config` for dataset controls, or `--model-name` for another embedding model.
-The existing CPU `check`, `audit`, and `split` detection paths are unchanged.
+For CUDA embeddings with a CPU index, `verascan[semantic,hf]` plus CUDA-enabled
+PyTorch is also supported. A missing or failed GPU index never moves embeddings
+off CUDA. Existing CPU `check`, `audit` and `split` paths remain available.
 
-## PDF reports and interactive dashboard
+## PDF, JSON and cleaned data
+
+PDF reports include a cover with the rate, dataset sizes, methods and benchmarks;
+a paginated match index; and highlighted word-level differences. JSON preserves
+the results for automation and the dashboard.
 
 ```python
-report = verascan.check(train="train.jsonl", eval="eval.jsonl")
-report.to_pdf("report.pdf")  # Summary cover, match table, highlighted word diffs
-report.to_json("report.json")  # Machine-readable results and dashboard input
+report.to_pdf("report.pdf")
+report.to_json("report.json")
+
+cleaned = report.cleaned_eval()
+flagged = report.contaminated_eval()
+report.to_cleaned("eval-cleaned.jsonl")
+report.to_contaminated("eval-flagged.jsonl")
 ```
+
+The legacy self-contained HTML export remains available through
+`report.to_html("report.html")`. PDF and the JSON dashboard are the primary
+reporting workflows.
+
+Bundled DejaVu fonts cover Latin, Greek and Cyrillic. Review scripts requiring
+additional fonts or shaping in the dashboard or original JSON.
+
+## CPU checks and benchmark presets
 
 ```bash
-verascan check --train train.jsonl --eval eval.jsonl --output report.pdf
-verascan audit --train train.jsonl --benchmarks gsm8k,mmlu --output report.pdf --output-json report.json
-verascan dashboard report.json
+# Compare existing training and evaluation files.
+verascan check --train train.jsonl --eval eval.jsonl --methods exact,fuzzy --output report.pdf --output-json report.json
+
+# Audit against public benchmark presets.
+verascan audit --train imdb --benchmarks mmlu,gsm8k --output report.pdf --output-json report.json
+
+# Fail a CI job when contamination exceeds 1%.
+verascan check --train train.jsonl --eval eval.jsonl --fail-above 0.01
 ```
 
-Preview the dashboard with five planted pairs across three benchmarks:
+| Method | Detects | Optional dependency |
+| --- | --- | --- |
+| `exact` | Normalized verbatim duplicates. | Core installation. |
+| `ngram` | Shared word passages; 13-word grams by default. | Core installation. |
+| `fuzzy` | Near-duplicates using MinHash and locality-sensitive hashing. | Core installation. |
+| `semantic` | Similar meaning using normalized sentence embeddings and FAISS search. | `semantic` extra. |
 
-```bash
-verascan dashboard report.json --demo
-```
+For offline benchmark examples, `verascan audit --synthetic` uses small synthetic
+stand-ins. It does not measure contamination against the actual public benchmarks.
 
-Demo mode displays separate sample data and never changes the real report.
+## Python API
 
-PDF is the sharing format; JSON powers the investigation dashboard. The PDF
-includes contamination rate, train/eval sizes, methods, benchmarks, scores, and
-paginated word-level differences. Bundled DejaVu fonts cover Latin, Greek, and
-Cyrillic; scripts requiring other fonts/shaping should be reviewed in the
-dashboard or original JSON. Fonts and their license ship with the package.
+### Flexible inputs
 
-The audit must complete successfully before its JSON file can be opened; an
-audit that exits with a CUDA error does not create a dashboard report.
-
-The dashboard runs locally on `127.0.0.1`, accepts existing 0.5.0 JSON exports,
-and opens a monochrome report workspace with a status card and four summary metrics.
-Use **Light mode** in the header to switch between a pure black dark theme and
-a pure white light theme. Filters and the selected pair stay in place while
-switching. Charts, controls, tables and word differences use grayscale; green,
-amber and red are reserved for contamination status.
-Clean reports show a completion panel and audit scope; reports with matches
-show method and benchmark charts. Filter by method, benchmark, or minimum
-score, search text literally, and review 25 pairs per page with side-by-side
-source text and highlighted differences. Status labels use Clean = 0%,
-Low < 5%, and High >= 5%; these are display categories, not statistical confidence.
-The rate counts unique evaluation examples and displays up to six decimal
-places (scientific notation for smaller nonzero rates), with exact flagged/total
-counts alongside it. Summary charts describe the full report; filters narrow
-the review table. Stop with
-Ctrl+C. HTML export remains a secondary option through `report.to_html()`.
-
----
-
-## 🛡️ Leak-Free Splitting (`verascan.split`)
-
-Instead of auditing datasets *after* training, prevent leakage upfront with `verascan.split()`. It partitions your dataset and iteratively purges candidate evaluation examples that are too similar to training samples:
-
-### Python API
+Inputs can be string lists, row dictionaries, pandas DataFrames, CSV or JSONL
+paths, Hugging Face Dataset objects, or dataset names with the `hf` extra.
 
 ```python
 import verascan
 
-# Create a leak-free train and eval split
-train, eval_set = verascan.split(
-    data="data/raw_dataset.jsonl",
-    eval_size=0.2,
-    methods=["exact", "fuzzy"],
-    seed=42,
-    output_train="data/train.jsonl",
-    output_eval="data/eval.jsonl",
-)
-
-print(f"Train samples: {len(train):,}")
-print(f"Eval samples : {len(eval_set):,}")
-```
-
-### CLI Command
-
-```bash
-verascan split \
-  --input data/raw_dataset.jsonl \
-  --eval-size 0.2 \
-  --output-train data/train.jsonl \
-  --output-eval data/eval.jsonl \
-  --methods exact,fuzzy \
-  --threshold 0.85
-```
-
----
-
-## 🏛️ Benchmark Auditing (`verascan.audit`)
-
-Audit your training data directly against popular public evaluation benchmarks (`mmlu`, `gsm8k`, `humaneval`) to detect pre-training contamination before benchmark evaluation:
-
-```python
-import verascan
-
-report = verascan.audit(
-    train="data/train.jsonl",
-    benchmarks=["mmlu", "gsm8k", "humaneval"],
-    methods=["exact", "fuzzy"],
-    threshold=0.85,
-)
-
-report.summary()
-report.to_pdf("audit_report.pdf")
-```
-
-<p align="center">
-  <img src="assets/benchmark-audit-preview.png" alt="Verascan Benchmark Audit Report Preview" width="100%">
-</p>
-
----
-
-## 🚀 Contamination Audit (`verascan.check`)
-
-### Python API
-
-```python
-import verascan
-
-# Run contamination audit across training and evaluation splits
 report = verascan.check(
-    train="data/train.jsonl",
-    eval="data/eval.jsonl",
-    methods=["exact", "ngram", "fuzzy", "semantic"],
-    threshold=0.85,
-)
-
-# Print terminal summary
-report.summary()
-
-# Inspect metrics
-print(f"Contamination Rate: {report.contamination_rate:.1%}")
-print(f"Flagged Pairs     : {report.total_matches}")
-
-# Query high-confidence matches
-for match in report.flagged(min_score=0.90):
-    print(
-        f"[{match.method}] Eval #{match.eval_index} <-> Train #{match.train_index} (Score: {match.score:.3f})"
-    )
-    print(f"  Eval : {match.eval_text}")
-    print(f"  Train: {match.train_text}")
-
-# Export a PDF report and JSON for the interactive dashboard
-report.to_pdf("contamination_report.pdf")
-report.to_json("contamination_report.json")
-
-# Export a decontaminated eval set (contaminated rows removed)
-cleaned = report.cleaned_eval()  # list[str] or pandas.DataFrame
-report.to_cleaned("eval_cleaned.jsonl")  # .jsonl, .csv, or .json
-```
-
-### Terminal Output
-
-```text
-===============================================
-  Verascan Contamination Report
-===============================================
-  Train size      : 50,000
-  Eval size       : 1,000
-  Methods         : exact, fuzzy, semantic
-  Threshold       : 0.85
------------------------------------------------
-  Total matches   : 14
-  Contaminated    : 12 / 1,000 eval samples (1.2%)
-    Exact matches : 4
-    Fuzzy matches : 7
-    Semantic hits : 3
-===============================================
-```
-
----
-
-## 📂 Supported Input Formats
-
-Verascan normalises inputs into clean text sequences automatically:
-
-```python
-import pandas as pd
-import verascan
-
-# 1. Plain String Lists
-report = verascan.check(
-    train=["The quick brown fox.", "Artificial intelligence."],
-    eval=["The quick brown fox."],
-)
-
-# 2. File Paths (CSV or JSONL)
-report = verascan.check(
-    train="data/train.jsonl",
-    eval="data/eval.csv",
-    column="text",
-)
-
-# 3. Pandas DataFrames
-train_df = pd.DataFrame({"prompt": ["Translate to French...", "Summarize..."]})
-eval_df = pd.DataFrame({"prompt": ["Translate to French..."]})
-report = verascan.check(train=train_df, eval=eval_df, column="prompt")
-
-# 4. Hugging Face Datasets (by name or Dataset object)
-# Direct dataset name string with custom splits & configs
-report = verascan.check(
-    train="gsm8k",
-    eval="gsm8k",
-    column="question",
-    train_split="train[:500]",
+    train="imdb",
+    eval="imdb",
+    train_split="train[:1000]",
     eval_split="test[:200]",
-    config="main",
+    column="text",
+    methods=["exact", "fuzzy"],
 )
 
-# Or audit directly against public benchmark presets
 audit_report = verascan.audit(
     train="imdb",
     benchmarks=["mmlu", "gsm8k"],
-    column="text",
+    methods=["exact", "fuzzy"],
     split="train[:2000]",
 )
 ```
 
----
-
-## 💻 CLI Usage
-
-The `verascan` CLI enables automated auditing and dataset splitting in terminal workflows and CI/CD pipelines:
-
-### 1. Split Datasets
-
-```bash
-# Partition dataset into leak-free splits
-verascan split \
-  --input data/raw_dataset.jsonl \
-  --eval-size 0.2 \
-  --output-train data/train.jsonl \
-  --output-eval data/eval.jsonl
-```
-
-### 2. Audit Contamination
-
-```bash
-# Basic contamination check
-verascan check --train data/train.jsonl --eval data/eval.jsonl
-
-# Custom columns, methods, threshold, HTML report, and cleaned output
-verascan check \
-  --train data/train.csv \
-  --eval data/eval.csv \
-  --methods exact,fuzzy \
-  --threshold 0.80 \
-  --column text \
-  --output report.html \
-  --output-cleaned eval_cleaned.jsonl
-
-# CI/CD Gate: Fail build if contamination rate exceeds 1%
-verascan check \
-  --train data/train.jsonl \
-  --eval data/eval.jsonl \
-  --fail-above 0.01
-```
-
-### 3. Benchmark Auditing
-
-```bash
-# Fast offline audit with synthetic stand-ins
-verascan audit --train train.jsonl --benchmarks mmlu,gsm8k --synthetic
-
-# Full benchmark audit with interactive HTML report
-verascan audit \
-  --train data/train.jsonl \
-  --benchmarks mmlu,gsm8k,humaneval \
-  --output audit_report.html
-```
-
----
-
-## 📊 Secondary HTML export
-
-For an offline single-file alternative, the legacy HTML report generated via `report.to_html("report.html")` is **100% self-contained** (no external fonts, CDNs, or scripts required):
-
-- **Health Status Banner**: Visual indicator (`Clean`, `Low Risk`, `High Risk`) with contamination percentage and progress meter.
-- **Method Breakdown**: Color-coded badges for exact (Rose), fuzzy (Amber), and semantic (Indigo) detections.
-- **Live Search & Filtering**: Instant client-side search across text samples and index numbers.
-- **Word-Level Diffs**: Color-coded `<del>` and `<ins>` tags illustrating textual overlap.
-- **Responsive Layout**: Designed for seamless viewing across desktop monitors and mobile devices.
-
-<p align="center">
-  <img src="assets/diff-inspection-preview.png" alt="Verascan Word-Level Diff Inspection Preview" width="100%">
-</p>
-
----
-
-## ⚙️ Python API Reference
-
-### `verascan.split(data, ...)`
+### Build splits while filtering overlap
 
 ```python
-train, eval = verascan.split(
-    data,  # str | pd.DataFrame | list[str] | list[dict] | Dataset
-    eval_size=0.2,  # float ratio (0-1) or int row count
-    methods=["exact", "fuzzy"],  # exact, fuzzy, semantic
-    threshold=0.85,  # similarity threshold (0-1)
-    column="text",  # text column for tabular inputs
-    seed=42,  # random seed for reproducible partition
-    move_to="train",  # "train" (preserve data) or "drop" (discard)
-    output_train="train.jsonl",  # optional path (.csv, .jsonl, .json)
-    output_eval="eval.jsonl",  # optional path (.csv, .jsonl, .json)
+import verascan
+
+train, eval_set = verascan.split(
+    data="data.jsonl",
+    eval_size=0.2,
+    methods=["exact", "fuzzy"],
+    threshold=0.85,
+    seed=42,
+    move_to="train",  # Move detected overlap to train, or use "drop".
+    output_train="train.jsonl",
+    output_eval="eval.jsonl",
 )
 ```
 
-### `verascan.audit(train, ...)`
-
-```python
-report = verascan.audit(
-    train="train.jsonl",  # path, DataFrame, list[str], list[dict], or Dataset
-    benchmarks=["mmlu", "gsm8k", "humaneval"],  # preset names
-    methods=["exact", "fuzzy"],  # exact, ngram, fuzzy, semantic
-    threshold=0.85,  # similarity cutoff
-    synthetic=False,  # set True for local offline testing
-)
-
-report.benchmark_counts  # dict: e.g. {"mmlu": 1, "gsm8k": 0, "humaneval": 2}
-report.by_benchmark()  # dict: matches grouped by benchmark name
+```bash
+verascan split --input data.jsonl --eval-size 0.2 --output-train train.jsonl --output-eval eval.jsonl
 ```
 
-### `verascan.check(train, eval, ...)`
+### Inspect results programmatically
 
 ```python
-report = verascan.check(train, eval)
+report.contamination_rate  # Fraction of evaluation examples flagged.
+report.formatted_contamination_rate  # Display percentage, including small nonzero rates.
+report.matches  # MatchRecord objects with text, indices, score and method.
+report.flagged(min_score=0.9)  # Matching pairs meeting a score cutoff.
+print(report.summary())  # summary() returns text without printing itself.
+payload = report.to_dict()
 
-# Properties
-report.contamination_rate  # float: Fraction of eval examples found in train (0.0 to 1.0)
-report.formatted_contamination_rate  # str: Formatted rate (e.g. "0.006%", never "0.0%" if matches exist)
-report.total_matches  # int: Total flagged pairs
-report.exact_count  # int: Exact duplicate count
-report.ngram_count  # int: N-gram overlap match count
-report.fuzzy_count  # int: Fuzzy / near-duplicate count
-report.semantic_count  # int: Semantic match count
-report.train_size  # int: Size of training corpus
-report.eval_size  # int: Size of evaluation corpus
-
-# Methods
-report.flagged(min_score=0.9)  # Returns list of MatchRecord objects >= min_score
-report.summary()  # Prints ASCII summary to stdout
-report.to_dict()  # Serialises report to a Python dict
-report.to_json("report.json")  # Exports JSON file
-report.to_pdf("report.pdf")  # Exports paginated PDF with highlighted differences
-report.to_html("report.html")  # Exports self-contained interactive HTML report
-report.cleaned_eval()  # Eval examples with contaminated rows removed
-report.contaminated_eval()  # Eval examples that were flagged
-report.to_cleaned("eval_clean.jsonl")  # Write cleaned eval as CSV / JSONL / JSON
-report.to_contaminated("eval_flagged.jsonl")  # Write flagged eval rows
+audit_report.benchmark_counts  # Unique flagged examples by benchmark.
+audit_report.by_benchmark()  # Matching pairs grouped by benchmark.
 ```
 
-### `MatchRecord` Structure
+Each `MatchRecord` has `eval_index`, `train_index`, `eval_text`, `train_text`,
+`score` and `method`. JSON audit exports also associate matches with benchmarks.
 
-Each match in `report.matches` contains:
-- `eval_index: int` — Index of the sample in the evaluation dataset.
-- `train_index: int` — Index of the sample in the training dataset.
-- `eval_text: str` — Evaluation sample text.
-- `train_text: str` — Matching training sample text.
-- `score: float` — Similarity metric (`1.0` for exact matches, n-gram overlap ratio for ngram, Jaccard for fuzzy, cosine for semantic).
-- `method: str` — Engine that produced the match (`"exact"`, `"ngram"`, `"fuzzy"`, `"semantic"`).
+## Interpreting the result
 
----
+- **Similarity is evidence to review.** Scores are method-specific: exact matches
+  score `1.0`; fuzzy matching uses Jaccard similarity; semantic matching uses
+  cosine similarity. They are not probabilities of training-data exposure.
+- **A clean report has a scope.** It applies to the supplied examples, methods,
+  model and threshold. It does not prove that a larger corpus has no leakage.
+- **Short text changes detection behavior.** Word n-gram matching needs at least
+  `ngram_n` words; the fuzzy engine falls back to exact matching on very short text.
+- **The default embedding model targets English.** Choose a suitable multilingual
+  `model_name` when comparing other languages.
+- **Control large runs.** HF split slices can bound loading; local files and dataset
+  objects may be materialized before limits are applied. GPU fallback can re-encode
+  training batches when rebuilding a CPU index.
 
-## ⚠️ Limitations
-
-- **Large-Scale Semantic Search**: While FAISS provides fast approximate search, semantic matching encodes all samples using transformer models, which is compute-intensive on CPU for corpora with millions of rows. For very large datasets, start with `methods=["exact", "fuzzy"]`.
-- **Character N-Gram Sensitivity**: Fuzzy matching relies on character 5-grams by default. Very short texts (fewer than 5 characters) fall back to exact matching.
-- **Word N-Gram Length**: The `ngram` method needs at least `ngram_n` words (default 13) after cleaning; shorter eval texts produce no n-gram matches.
-- **Cross-Lingual Matching**: The default semantic model (`all-MiniLM-L6-v2`) is optimized for English text. For multilingual evaluation datasets, specify a multilingual model via `model_name="paraphrase-multilingual-MiniLM-L12-v2"`.
-
----
-
-## 🛠️ Development
+## Development
 
 ```bash
-# Clone repository
 git clone https://github.com/balamuruganpg/verascan.git
 cd verascan
-
-# Install development dependencies
 pip install -e ".[all,dev]"
-
-# Run test suite
-pytest
-
-# Code formatting and linting
+pytest tests/ -v --tb=short
 ruff check .
 ruff format --check .
-
-# Type checking
 mypy src/
+python -m build
 ```
 
----
+Package builds use this README for the PyPI long description, converting local
+`screenshots/` image links to absolute GitHub URLs. Push the referenced image
+files to GitHub before publishing a release so PyPI can retrieve them.
 
-## 📄 License
+## License
 
-Distributed under the [MIT License](https://github.com/balamuruganpg/verascan/blob/main/LICENSE).
+Verascan is released under the [MIT license](https://github.com/balamuruganpg/verascan/blob/main/LICENSE).
