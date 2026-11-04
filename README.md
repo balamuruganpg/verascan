@@ -8,7 +8,7 @@
 [![CI](https://github.com/balamuruganpg/verascan/actions/workflows/ci.yml/badge.svg)](https://github.com/balamuruganpg/verascan/actions/workflows/ci.yml)
 [![Python Versions](https://img.shields.io/badge/python-3.9%20%7C%203.10%20%7C%203.11%20%7C%203.12-blue.svg)](https://pypi.org/project/verascan/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](https://github.com/balamuruganpg/verascan/blob/main/LICENSE)
-[![Tests](https://img.shields.io/badge/Tests-143%20passed-brightgreen.svg)](https://github.com/balamuruganpg/verascan/actions)
+[![Tests](https://img.shields.io/badge/Tests-pytest-brightgreen.svg)](https://github.com/balamuruganpg/verascan/actions)
 [![Type Checking](https://img.shields.io/badge/Typing-Strict-blue.svg)](https://mypy-lang.org/)
 [![Code Style](https://img.shields.io/badge/Code%20Style-Ruff-000000.svg)](https://github.com/astral-sh/ruff)
 
@@ -21,9 +21,7 @@
 
 <br>
 
-<p align="center">
-  <img src="assets/report-preview.png" alt="Verascan Interactive HTML Report Preview" width="100%">
-</p>
+<p align="center">NVIDIA CUDA benchmark auditing. PDF reports for sharing. A local dashboard for investigation.</p>
 
 </div>
 
@@ -51,7 +49,8 @@ Data contamination occurs when evaluation or benchmark examples leak into a mode
 - **Multi-Tier Detection**: Run exact, ngram, fuzzy, and semantic algorithms independently or in a cascaded pipeline.
 - **Cross-Method Deduplication**: Matches identified by earlier methods are automatically excluded from later passes to prevent double-counting.
 - **Multi-Format Ingestion**: Natively accepts `pandas.DataFrame`, `JSONL`, `CSV`, Hugging Face `datasets.Dataset`, `list[str]`, and `list[dict]`.
-- **Interactive HTML Reports**: Generates self-contained, offline-ready HTML reports featuring live search, method filtering, and word-level diffs.
+- **NVIDIA GPU Audits**: Dedicated CUDA embedding path with GPU-preferred FAISS, batched indexing/search, device diagnostics, and controlled row limits.
+- **PDF Reports and Dashboard**: Share paginated PDF summaries, match tables, and highlighted word differences; investigate JSON reports with a local Streamlit dashboard, charts, search, and filters. Legacy self-contained HTML remains available.
 - **Cleaned Eval Export**: Drop contaminated eval rows and write a reusable CSV/JSONL benchmark (`cleaned_eval()`, `to_cleaned()`, CLI `--output-cleaned`).
 - **CI/CD Integration**: CLI includes `--fail-above` to fail builds if contamination exceeds an allowed threshold.
 - **Lightweight Core**: Installs cleanly with minimal dependencies; heavy ML dependencies (`sentence-transformers`, `faiss-cpu`) are optional extras.
@@ -84,9 +83,152 @@ pip install "verascan[semantic]"
 # With Hugging Face datasets support
 pip install "verascan[hf]"
 
-# Complete installation with all optional extras
+# CPU semantic + Hugging Face extras (GPU and dashboard are separate)
 pip install "verascan[all]"
+
+# NVIDIA GPU auditing (also includes Hugging Face dataset support)
+pip install "verascan[gpu]"
+
+# Local interactive report dashboard (Python 3.11+)
+pip install "verascan[dashboard]"
 ```
+
+PDF export is included in the core installation. GPU auditing needs an NVIDIA
+driver and a **CUDA-enabled PyTorch build**. Follow the
+[PyTorch installation selector](https://pytorch.org/get-started/locally/) for your
+OS and CUDA runtime; a CPU-only PyTorch install cannot run `gpu_audit`.
+
+The GPU extra requests `sentence-transformers`, `torch`, `datasets`, and a
+platform-selected FAISS package. **Linux x86-64 uses `faiss-gpu`; Windows and
+other platforms use `faiss-cpu`** because NVIDIA FAISS-GPU wheels are not
+universally available. On Windows, embeddings run on CUDA while the index uses
+the documented FAISS-CPU fallback, with a visible warning.
+
+An installed CPU-only PyTorch build already satisfies `torch>=2.0`; installing
+the GPU extra does **not** automatically replace it with a CUDA build. For
+example, this Windows/Python 3.11 setup explicitly selects PyTorch 2.8 with CUDA
+12.6 (an NVIDIA driver compatible with CUDA 12.6 is required):
+
+```powershell
+python -m pip install -e ".[gpu,dashboard]"
+python -m pip install "torch==2.8.0+cu126" --index-url https://download.pytorch.org/whl/cu126
+python -c "import torch; print(torch.__version__, torch.version.cuda, torch.cuda.is_available())"
+```
+
+Use the [official PyTorch version instructions](https://pytorch.org/get-started/previous-versions/)
+when selecting a different version or CUDA runtime. `nvidia-smi` detects the
+driver/GPU; `torch.cuda.is_available()` verifies that Python can actually use it.
+
+For full FAISS-GPU indexing, use a compatible Linux setup following
+[FAISS installation instructions](https://github.com/facebookresearch/faiss/blob/main/INSTALL.md)
+(for example, WSL2/Linux with a compatible Conda build). If pip cannot resolve
+the Linux wheel, install FAISS-GPU separately, then install Verascan and
+the remaining dependencies in that same environment:
+
+```bash
+pip install "verascan[hf]" sentence-transformers
+# Install CUDA-enabled torch using the PyTorch selector above.
+# Install FAISS-GPU using the FAISS instructions above.
+```
+
+For CUDA embeddings with a CPU FAISS index, install
+`pip install "verascan[semantic,hf]"` and CUDA-enabled PyTorch instead.
+Verascan first attempts a GPU index; an unavailable or failing GPU index emits
+a warning and retries on FAISS-CPU. **Embeddings remain on CUDA**. Missing CUDA
+is an error, never a silent switch to CPU embeddings. Avoid installing
+`faiss-cpu` and `faiss-gpu` together: both provide the `faiss` module.
+
+## NVIDIA GPU benchmark audits (0.6.0)
+
+```python
+import verascan
+
+report = verascan.gpu_audit(
+    train="imdb",
+    benchmarks=["mmlu", "gsm8k", "humaneval"],
+    column="text",
+    device="cuda",
+    batch_size=64,
+    max_train=10000,
+    max_eval=1000,
+)
+print(report.summary())
+report.to_pdf("report.pdf")
+report.to_json("report.json")
+```
+
+```bash
+verascan gpu --train imdb --benchmarks mmlu,gsm8k --column text --device cuda --batch-size 64 --output report.pdf --output-json report.json
+
+# Larger runs, with explicit row limits and a selected GPU
+verascan gpu --train imdb --benchmarks mmlu,gsm8k,humaneval --device cuda:0 --batch-size 256 --max-train 10000 --max-eval 1000 --output report.pdf --output-json report.json
+
+verascan dashboard report.json
+```
+
+The GPU command prints the selected device, CUDA runtime, and free/total memory
+before loading datasets. GPU batches default to **256**; reduce `--batch-size`
+if CUDA memory is exhausted. Progress bars cover training embedding/indexing
+and evaluation embedding/search; `--no-progress` disables them.
+
+GPU audits run semantic matching and retain up to **10 nearest training
+neighbors per evaluation row**, filtered by `--threshold` (default 0.85).
+`--max-train` limits training rows, and `--max-eval` limits rows **per benchmark**.
+Without limits, the GPU path uses the full training split. HF limits are passed
+as split slices when possible; local files and dataset objects are loaded before
+slicing. Batching bounds temporary embedding memory; the dataset texts, index,
+and result pairs must still fit memory. A FAISS fallback may re-encode training
+batches to rebuild the CPU index. Use `--train-split`, `--benchmark-split`, and
+`--config` for dataset controls, or `--model-name` for another embedding model.
+The existing CPU `check`, `audit`, and `split` detection paths are unchanged.
+
+## PDF reports and interactive dashboard
+
+```python
+report = verascan.check(train="train.jsonl", eval="eval.jsonl")
+report.to_pdf("report.pdf")  # Summary cover, match table, highlighted word diffs
+report.to_json("report.json")  # Machine-readable results and dashboard input
+```
+
+```bash
+verascan check --train train.jsonl --eval eval.jsonl --output report.pdf
+verascan audit --train train.jsonl --benchmarks gsm8k,mmlu --output report.pdf --output-json report.json
+verascan dashboard report.json
+```
+
+Preview the dashboard with five planted pairs across three benchmarks:
+
+```bash
+verascan dashboard report.json --demo
+```
+
+Demo mode displays separate sample data and never changes the real report.
+
+PDF is the sharing format; JSON powers the investigation dashboard. The PDF
+includes contamination rate, train/eval sizes, methods, benchmarks, scores, and
+paginated word-level differences. Bundled DejaVu fonts cover Latin, Greek, and
+Cyrillic; scripts requiring other fonts/shaping should be reviewed in the
+dashboard or original JSON. Fonts and their license ship with the package.
+
+The audit must complete successfully before its JSON file can be opened; an
+audit that exits with a CUDA error does not create a dashboard report.
+
+The dashboard runs locally on `127.0.0.1`, accepts existing 0.5.0 JSON exports,
+and opens a monochrome report workspace with a status card and four summary metrics.
+Use **Light mode** in the header to switch between a pure black dark theme and
+a pure white light theme. Filters and the selected pair stay in place while
+switching. Charts, controls, tables and word differences use grayscale; green,
+amber and red are reserved for contamination status.
+Clean reports show a completion panel and audit scope; reports with matches
+show method and benchmark charts. Filter by method, benchmark, or minimum
+score, search text literally, and review 25 pairs per page with side-by-side
+source text and highlighted differences. Status labels use Clean = 0%,
+Low < 5%, and High >= 5%; these are display categories, not statistical confidence.
+The rate counts unique evaluation examples and displays up to six decimal
+places (scientific notation for smaller nonzero rates), with exact flagged/total
+counts alongside it. Summary charts describe the full report; filters narrow
+the review table. Stop with
+Ctrl+C. HTML export remains a secondary option through `report.to_html()`.
 
 ---
 
@@ -142,7 +284,7 @@ report = verascan.audit(
 )
 
 report.summary()
-report.to_html("audit_report.html")
+report.to_pdf("audit_report.pdf")
 ```
 
 <p align="center">
@@ -181,8 +323,8 @@ for match in report.flagged(min_score=0.90):
     print(f"  Eval : {match.eval_text}")
     print(f"  Train: {match.train_text}")
 
-# Export interactive HTML and machine-readable JSON reports
-report.to_html("contamination_report.html")
+# Export a PDF report and JSON for the interactive dashboard
+report.to_pdf("contamination_report.pdf")
 report.to_json("contamination_report.json")
 
 # Export a decontaminated eval set (contaminated rows removed)
@@ -312,9 +454,9 @@ verascan audit \
 
 ---
 
-## 📊 Interactive HTML Reports
+## 📊 Secondary HTML export
 
-The HTML report generated via `report.to_html("report.html")` is **100% self-contained** (no external fonts, CDNs, or scripts required):
+For an offline single-file alternative, the legacy HTML report generated via `report.to_html("report.html")` is **100% self-contained** (no external fonts, CDNs, or scripts required):
 
 - **Health Status Banner**: Visual indicator (`Clean`, `Low Risk`, `High Risk`) with contamination percentage and progress meter.
 - **Method Breakdown**: Color-coded badges for exact (Rose), fuzzy (Amber), and semantic (Indigo) detections.
@@ -382,6 +524,7 @@ report.flagged(min_score=0.9)  # Returns list of MatchRecord objects >= min_scor
 report.summary()  # Prints ASCII summary to stdout
 report.to_dict()  # Serialises report to a Python dict
 report.to_json("report.json")  # Exports JSON file
+report.to_pdf("report.pdf")  # Exports paginated PDF with highlighted differences
 report.to_html("report.html")  # Exports self-contained interactive HTML report
 report.cleaned_eval()  # Eval examples with contaminated rows removed
 report.contaminated_eval()  # Eval examples that were flagged

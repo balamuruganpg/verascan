@@ -13,6 +13,7 @@ import verascan._env  # noqa: F401
 from verascan._version import __version__
 from verascan.audit import AuditReport, audit
 from verascan.core import check
+from verascan.gpu import gpu_audit
 from verascan.report import ContaminationReport, MatchRecord
 from verascan.split import split
 
@@ -23,5 +24,6 @@ __all__ = [
     "__version__",
     "audit",
     "check",
+    "gpu_audit",
     "split",
 ]

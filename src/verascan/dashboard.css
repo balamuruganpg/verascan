@@ -1,0 +1,138 @@
+/* Theme tokens are supplied per session by dashboard_style.py. */
+body, .stApp, [data-testid="stAppViewContainer"] {
+  background: var(--vs-bg); color: var(--vs-fg);
+  font-family: "Inter", "Segoe UI", -apple-system, BlinkMacSystemFont, sans-serif;
+}
+[data-testid="stHeader"], [data-testid="stAppDeployButton"] { display: none; }
+[data-testid="stMainBlockContainer"] { max-width: 1480px; padding: 2rem 3.25rem 2rem; }
+[data-testid="stVerticalBlock"] { gap: 1.15rem; }
+[data-testid="stMarkdownContainer"], [data-testid="stWidgetLabel"], [data-testid="stMetric"] { color: var(--vs-fg); }
+[data-testid="stMarkdownContainer"] p, [data-testid="stCaptionContainer"] p { font-family: inherit; }
+[data-testid="stCaptionContainer"] { color: var(--vs-muted); font-size: 12px; }
+[data-testid="stCaptionContainer"] p { color: var(--vs-muted); }
+[data-testid="stHeaderActionElements"] a { color: var(--vs-muted); }
+[data-testid="stMarkdownContainer"] h2, [data-testid="stMarkdownContainer"] h3 { color: var(--vs-fg); font-family: inherit; font-size: 18px; font-weight: 550; letter-spacing: -.5px; padding-top: 0; }
+[data-testid="stVerticalBlockBorderWrapper"] > div { border-color: var(--vs-border); border-radius: 12px; background: var(--vs-card); }
+.st-key-masthead { border-bottom: 1px solid var(--vs-border); padding-bottom: 24px; }
+.vs-brand { display: flex; align-items: center; gap: 13px; font-size: 26px; font-weight: 650; letter-spacing: -1.1px; line-height: 1.1; }
+.vs-logo { display: grid; place-items: center; width: 44px; height: 44px; border-radius: 12px; background: var(--vs-fg); color: var(--vs-bg); }
+.vs-logo-mark { font-family: Arial, sans-serif; font-size: 31px; font-weight: 800; line-height: 1; letter-spacing: -2px; padding-right: 2px; }
+.vs-brand-sub { display: block; margin-top: 7px; font-size: 8px; font-weight: 500; letter-spacing: 2px; color: var(--vs-muted); }
+.vs-document { display: flex; gap: 9px; justify-content: flex-end; align-items: center; color: var(--vs-muted); font-size: 12px; overflow-wrap: anywhere; }
+.vs-doc-icon { font-size: 20px; color: var(--vs-subtle); }
+.st-key-masthead .st-key-light_theme { display: flex; justify-content: flex-end; padding-left: 16px; border-left: 1px solid var(--vs-border); }
+.st-key-masthead .st-key-light_theme p { font-size: 12px; white-space: nowrap; }
+.st-key-light_theme label > div:first-of-type { background: var(--vs-raised) !important; border: 1px solid var(--vs-border-hover); }
+.st-key-light_theme label > div:first-of-type > div { background: var(--vs-fg) !important; }
+.st-key-light_theme label[data-selected="true"] > div:first-of-type { background: var(--vs-fg) !important; }
+.st-key-light_theme label[data-selected="true"] > div:first-of-type > div { background: var(--vs-bg) !important; }
+.vs-page-heading { margin: 23px 0 10px; }
+.vs-eyebrow { display: block; font-size: 10px; font-weight: 550; letter-spacing: 1.8px; color: var(--vs-subtle); line-height: 1.8; }
+.vs-slash { margin: 0 9px; color: var(--vs-border-hover); }
+.vs-page-heading h1 { margin: 12px 0 9px; padding: 0; font-size: 45px; font-weight: 550; line-height: 1.15; letter-spacing: -2.4px; color: var(--vs-fg); }
+.vs-heading-dot { color: var(--vs-subtle); }
+.vs-page-heading p { margin: 0; font-size: 14px; color: var(--vs-muted); line-height: 1.6; }
+.vs-demo { display: flex; flex-wrap: wrap; gap: 16px; align-items: center; background: var(--vs-surface); border: 1px dashed var(--vs-border-hover); padding: 12px 18px; border-radius: 8px; font-size: 12px; color: var(--vs-muted); }
+.vs-demo strong { font-size: 9px; font-weight: 600; letter-spacing: 1.5px; color: var(--vs-fg); }
+.vs-hero { --status: var(--vs-clean); display: grid; grid-template-columns: 1.4fr 1fr; gap: 40px; align-items: center; border: 1px solid var(--vs-border); background: var(--vs-surface); border-radius: 16px; padding: 32px 38px; }
+.vs-low { --status: var(--vs-low); }
+.vs-high { --status: var(--vs-high); }
+.vs-neutral { --status: var(--vs-muted); }
+.vs-status { display: inline-flex; align-items: center; gap: 7px; padding: 5px 10px; border-radius: 6px; font-size: 10px; font-weight: 600; letter-spacing: .5px; color: var(--status); background: color-mix(in srgb, var(--status) 8%, var(--vs-surface)); border: 1px solid color-mix(in srgb, var(--status) 24%, var(--vs-surface)); }
+.vs-live-dot { display: inline-block; width: 5px; height: 5px; border-radius: 100%; background: var(--status); }
+.vs-hero h2 { margin: 18px 0 13px; padding: 0; color: var(--vs-fg); font-size: 34px; font-weight: 500; line-height: 1.2; letter-spacing: -1.4px; }
+.vs-hero p { margin: 0; font-size: 12px; line-height: 1.7; color: var(--vs-muted); }
+.vs-tags { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 20px; }
+.vs-tags span { padding: 4px 8px; border-radius: 4px; background: var(--vs-card); border: 1px solid var(--vs-border); color: var(--vs-muted); font-size: 10px; }
+.vs-rate { text-align: right; padding-left: 36px; border-left: 1px solid var(--vs-border); min-width: 0; }
+.vs-rate strong { display: block; font-size: clamp(36px, 6.8vw, 96px); font-weight: 500; letter-spacing: -5px; line-height: 1.2; color: var(--vs-fg); margin: 9px 0 8px; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.vs-rate > span { font-size: 11px; color: var(--vs-muted); }
+.vs-rate-precise strong { font-size: clamp(28px, 4vw, 54px); letter-spacing: -2px; white-space: nowrap; }
+.vs-rate-track { height: 3px; background: var(--vs-raised); width: 100%; margin: 22px 0 0; border-radius: 2px; overflow: hidden; }
+.vs-rate-track i { display: block; height: 100%; background: var(--status); }
+[data-testid="stMetric"] { background: var(--vs-card); border: 1px solid var(--vs-border); border-radius: 10px; padding: 18px 22px; }
+[data-testid="stMetricLabel"] { color: var(--vs-muted); font-size: 11px; }
+[data-testid="stMetricValue"] { color: var(--vs-fg); font-size: clamp(20px, 2.3vw, 31px); font-weight: 500; letter-spacing: -1.2px; font-variant-numeric: tabular-nums; }
+.vs-empty, .vs-scope { padding: 28px; border: 1px solid var(--vs-border); background: var(--vs-surface); border-radius: 12px; min-height: 290px; }
+.vs-check { --status: var(--vs-clean); display: grid; place-items: center; width: 38px; height: 38px; border: 1px solid color-mix(in srgb, var(--status) 25%, var(--vs-surface)); background: color-mix(in srgb, var(--status) 7%, var(--vs-surface)); color: var(--status); border-radius: 10px; font-size: 21px; margin-bottom: 18px; }
+.vs-empty h2 { color: var(--vs-fg); padding: 0; font-size: 23px; font-weight: 500; letter-spacing: -.8px; margin: 9px 0 12px; }
+.vs-empty p { color: var(--vs-muted); font-size: 13px; line-height: 1.8; margin: 0; max-width: 500px; }
+.vs-empty-note { margin-top: 22px; border-top: 1px solid var(--vs-border); padding-top: 15px; font-size: 11px; line-height: 1.8; color: var(--vs-subtle); }
+.vs-scope h3 { margin: 8px 0 20px; padding: 0; font-size: 19px; font-weight: 550; letter-spacing: -.5px; color: var(--vs-fg); }
+.vs-scope dl { margin: 0; display: grid; grid-template-columns: 1fr 1.35fr; gap: 16px 20px; font-size: 12px; }
+.vs-scope dt { color: var(--vs-subtle); }
+.vs-scope dd { margin: 0; color: var(--vs-fg); overflow-wrap: anywhere; }
+.vs-section-title { margin: 20px 0 3px; }
+.vs-section-title h2 { margin: 0 0 7px; padding: 0; font-size: 23px; font-weight: 500; letter-spacing: -.8px; color: var(--vs-fg); }
+.vs-section-title p { margin: 0; font-size: 12px; color: var(--vs-muted); }
+.vs-notice { border: 1px solid var(--vs-border); border-radius: 12px; background: var(--vs-card); padding: 28px; color: var(--vs-fg); font-size: 14px; }
+.vs-notice strong { font-weight: 550; }
+.vs-notice p { color: var(--vs-muted); font-size: 12px; line-height: 1.8; margin: 8px 0 0; }
+.st-key-chart_method, .st-key-chart_benchmark, .st-key-filters { background: var(--vs-card); border: 1px solid var(--vs-border); border-radius: 12px; padding: 20px; }
+
+/* Native input controls share the same tokens as the custom report content. */
+[data-testid="stTextInput"] input, [data-testid="stNumberInput"] input,
+[role="combobox"], textarea { color: var(--vs-fg) !important; caret-color: var(--vs-fg); background: transparent !important; }
+[data-testid="stTextInput"] > div > div, [data-testid="stNumberInput"] > div > div,
+[data-testid="stSelectbox"] > div > div, [data-testid="stMultiSelect"] > div > div {
+  background: var(--vs-field) !important; color: var(--vs-fg) !important; border-color: var(--vs-border) !important; border-radius: 7px;
+}
+[data-testid="stTextInput"] input::placeholder { color: var(--vs-subtle); }
+[data-testid="stMultiSelect"] [data-tag] { background: var(--vs-raised); color: var(--vs-fg); border: 1px solid var(--vs-border-hover); border-radius: 4px; }
+[data-testid="stMultiSelect"] [data-tag] button { color: var(--vs-muted); }
+[data-testid="stMultiSelect"] button, [data-testid="stSelectbox"] button { color: var(--vs-muted) !important; }
+[role="listbox"] { color: var(--vs-fg) !important; background: var(--vs-field) !important; border: 1px solid var(--vs-border); }
+[role="option"] { color: var(--vs-fg) !important; background: var(--vs-field) !important; }
+[role="option"][aria-selected="true"], [role="option"]:hover { background: var(--vs-raised) !important; }
+[data-testid="stSlider"] [role="slider"] { background: var(--vs-fg) !important; border-color: var(--vs-fg) !important; }
+[data-testid="stSlider"] [data-rac]:has(> div > input[type="range"]) { background: var(--vs-fg) !important; border: 1px solid var(--vs-fg); box-shadow: 0 0 0 2px var(--vs-card); }
+[data-testid="stSlider"] [data-orientation="horizontal"]:not([role="group"]) > div:first-child { background: var(--vs-raised) !important; }
+[data-testid="stTextInput"] [data-testid="stIconMaterial"] { color: var(--vs-subtle) !important; }
+[data-testid="stNumberInput"] button { color: var(--vs-muted) !important; background: var(--vs-field) !important; }
+[data-testid="stSlider"] p, .st-key-light_theme p { color: var(--vs-fg); }
+button:focus-visible, input:focus-visible, [role="combobox"]:focus-visible { outline: 2px solid var(--vs-border-hover); outline-offset: 3px; }
+[data-testid="stAlert"] { background: var(--vs-card); color: var(--vs-fg); border: 1px solid var(--vs-border); }
+[data-testid="stAlert"] svg { color: var(--vs-fg); }
+
+/* A semantic table keeps every column consistent across both themes. */
+.vs-table-wrap { border: 1px solid var(--vs-border); border-radius: 10px; overflow: auto; max-height: 540px; background: var(--vs-surface); }
+.vs-match-table { border-collapse: separate; border-spacing: 0; width: 100%; table-layout: fixed; min-width: 850px; font-size: 12px; color: var(--vs-fg); }
+.vs-match-table th { background: var(--vs-card); color: var(--vs-muted); font-size: 10px; font-weight: 500; text-align: left; padding: 14px 16px; border-bottom: 1px solid var(--vs-border); position: sticky; top: 0; z-index: 1; }
+.vs-match-table th:nth-child(1) { width: 9%; }
+.vs-match-table th:nth-child(2) { width: 11%; }
+.vs-match-table th:nth-child(3) { width: 12%; }
+.vs-match-table th:nth-child(4), .vs-match-table th:nth-child(5) { width: 30%; }
+.vs-match-table th:nth-child(6) { width: 8%; }
+.vs-match-table td { padding: 17px 16px; vertical-align: middle; border-bottom: 1px solid var(--vs-border); line-height: 1.6; }
+.vs-match-table tr:last-child td { border-bottom: 0; }
+.vs-match-table tbody tr:hover td { background: var(--vs-card); }
+.vs-score { font-size: 12px; font-variant-numeric: tabular-nums; font-weight: 600; }
+.vs-score-track { display: block; width: 40px; height: 2px; margin-top: 6px; background: var(--vs-raised); }
+.vs-score-track i { display: block; height: 100%; background: var(--vs-muted); }
+.vs-method { display: inline-block; border: 1px solid var(--vs-border); background: var(--vs-card); padding: 2px 6px; border-radius: 4px; color: var(--vs-muted); font-size: 10px; }
+.vs-benchmark { font-size: 10px; letter-spacing: .5px; text-transform: uppercase; }
+.vs-table-text { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; overflow-wrap: anywhere; font-size: 11px; color: var(--vs-muted); }
+.vs-ref { font-size: 9px; color: var(--vs-subtle); font-variant-numeric: tabular-nums; }
+.vs-sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
+.vs-text-card { padding: 23px; border: 1px solid var(--vs-border); border-radius: 10px; background: var(--vs-surface); }
+.vs-pair-text { margin-top: 15px; color: var(--vs-fg); font-size: 13px; white-space: pre-wrap; line-height: 1.85; overflow-wrap: anywhere; max-height: 360px; overflow-y: auto; }
+[data-testid="stExpander"] { border-color: var(--vs-border); background: var(--vs-surface); }
+[data-testid="stExpander"] summary { color: var(--vs-fg); background: var(--vs-card); }
+.vs-diff { color: var(--vs-fg); font-size: 13px; line-height: 2; overflow-wrap: anywhere; }
+.vs-diff del { color: var(--vs-muted); background: var(--vs-raised); padding: 2px 3px; border-radius: 3px; text-decoration-thickness: 1px; }
+.vs-diff ins { color: var(--vs-fg); background: var(--vs-raised); padding: 2px 3px; border-radius: 3px; text-decoration-thickness: 2px; text-underline-offset: 3px; }
+.vs-footer { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 16px; border-top: 1px solid var(--vs-border); padding-top: 22px; margin-top: 30px; color: var(--vs-subtle); font-size: 10px; }
+.vs-footer strong { color: var(--vs-fg); font-weight: 550; }
+.vs-footer a { color: var(--vs-muted); text-decoration: none; }
+.vs-footer a:hover { color: var(--vs-fg); text-decoration: underline; }
+@media (max-width: 700px) {
+  [data-testid="stMainBlockContainer"] { padding: 1.4rem 1.2rem; }
+  .vs-page-heading h1 { font-size: 36px; }
+  .vs-hero { grid-template-columns: 1fr; gap: 25px; padding: 24px; }
+  .vs-hero h2 { font-size: 29px; }
+  .vs-rate { border-left: 0; border-top: 1px solid var(--vs-border); padding: 23px 0 0; text-align: left; }
+  .vs-rate strong { font-size: 58px; letter-spacing: -3px; }
+  .vs-empty, .vs-scope { min-height: 0; padding: 24px; }
+  .vs-document { justify-content: flex-start; }
+  .st-key-masthead .st-key-light_theme { justify-content: flex-start; border: 0; padding: 0; }
+}

@@ -201,6 +201,12 @@ class ContaminationReport:
             encoding="utf-8",
         )
 
+    def to_pdf(self, path: str) -> None:
+        """Write a paginated PDF with summary, match table and highlighted differences."""
+        from verascan.pdf_report import write_pdf
+
+        write_pdf(self, path)
+
     def to_html(self, path: str) -> None:
         """Render a self-contained, modern HTML report."""
         enriched = []

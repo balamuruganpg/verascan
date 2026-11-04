@@ -9,6 +9,62 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-11-03
+
+### Added
+- **Dedicated NVIDIA GPU auditing** through `verascan.gpu_audit()` and `verascan gpu`.
+  - CUDA availability checks before dataset loading, selected `cuda:N` devices,
+    and CLI device name, CUDA runtime, free/total memory diagnostics.
+  - SentenceTransformer embeddings explicitly on CUDA; GPU-preferred FAISS
+    inner-product search over normalized float32 embeddings.
+  - Visible FAISS-CPU index fallback after GPU index creation, insertion, or
+    search failure, while embeddings remain on CUDA. CUDA/embedding failures
+    report actionable errors rather than silently using CPU embeddings.
+  - Default GPU batch size 256, batched encoding/indexing/search with tqdm
+    progress, optional `max_train` / `--max-train` and per-benchmark
+    `max_eval` / `--max-eval`, model and dataset split/config controls.
+  - Up to ten nearest training neighbors per evaluation row, filtered by score.
+- **PDF export** via `report.to_pdf("report.pdf")` on both contamination and audit
+  reports, plus `.pdf` CLI output for `check`, `audit`, and `gpu`.
+  - Summary cover with contamination rate, train/eval sizes, methods, benchmarks;
+    paginated score tables and full highlighted word-level differences.
+  - ReportLab rendering independent of the HTML template, with bundled licensed
+    DejaVu fonts, safe dataset markup escaping, page footers, and long-text support.
+- **Local Streamlit dashboard** via `verascan dashboard report.json`.
+  - Custom monochrome workspace with pure black/white themes and a header
+    toggle that preserves filters and selection. Grayscale charts, controls,
+    semantic pair table and word differences; color reserved for status.
+  - Clean/Low/High status card, train/eval/match/rate metrics, and a dedicated
+    clean state without empty charts.
+  - Method and benchmark charts for reports with matches, score/method/benchmark
+    filters, literal search, paginated pairs, side-by-side source text and diffs.
+  - `--demo` previews five planted pairs without modifying the real report.
+  - Compatible with existing JSON exports; optional `[dashboard]` extra
+    (Python 3.11+), launched on localhost using the active Python environment.
+- **GPU extra**: `pip install "verascan[gpu]"` requests sentence-transformers,
+  faiss-gpu, torch, and datasets; documented CUDA PyTorch and FAISS platform constraints.
+- GPU mocking/fallback tests, PDF content/pagination tests, dashboard widget tests,
+  and CLI coverage for the new paths.
+
+### Changed
+- FAISS capability checks distinguish CPU installations before indexing and
+  emit one clear CUDA-preserving fallback line. GPU installations prefer the
+  standard resource/transfer API, with direct GPU flat-index construction when
+  the transfer helper is unavailable. CPU-only detection avoids duplicate encoding.
+- PDF cover now uses a navy summary panel, status/rate, size tiles and a
+  dedicated audit-configuration section.
+- GPU installation selects FAISS-CPU on Windows and non-x86-64 Linux platforms
+  rather than requesting unavailable FAISS-GPU wheels. CUDA embeddings remain
+  mandatory; Linux x86-64 continues to prefer FAISS-GPU.
+- CPU-only PyTorch builds now produce an explicit CUDA installation diagnostic,
+  even when an NVIDIA GPU and driver are present.
+- PDF and the JSON dashboard are the primary reporting workflows; JSON and
+  self-contained legacy HTML exports remain supported.
+- GPU HF inputs default to the full training split; existing CPU dataset bounds,
+  matching behavior, and `check` / `audit` / `split` defaults are unchanged.
+- Added ReportLab to core dependencies. Version remains sourced by Hatch from
+  `src/verascan/_version.py`, now `0.6.0`.
+
 ## [0.5.0] - 2026-10-01
 
 ### Added

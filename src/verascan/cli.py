@@ -55,7 +55,7 @@ def check(
         None,
         "--output",
         "-o",
-        help="Write report to this path (.html or .json).",
+        help="Write report to this path (.pdf, .json, or secondary .html).",
     ),
     output_cleaned: str | None = typer.Option(
         None,
@@ -104,7 +104,10 @@ def check(
 
     # Write output file if requested.
     if output:
-        if output.endswith(".html"):
+        if output.lower().endswith(".pdf"):
+            report.to_pdf(output)
+            typer.echo(f"PDF report written to: {output}")
+        elif output.endswith(".html"):
             report.to_html(output)
             typer.echo(f"HTML report written to: {output}")
         elif output.endswith(".json"):
@@ -132,6 +135,106 @@ def check(
             err=True,
         )
         raise typer.Exit(code=1)
+
+
+@app.command()
+def gpu(
+    train: str = typer.Option(
+        ..., "--train", "-t", help="Training file or Hugging Face dataset name."
+    ),
+    benchmarks: str = typer.Option("mmlu,gsm8k,humaneval", "--benchmarks", "-b"),
+    column: str = typer.Option("text", "--column", "-c"),
+    device: str = typer.Option("cuda", "--device", help="NVIDIA CUDA device: cuda or cuda:N."),
+    batch_size: int = typer.Option(
+        256, "--batch-size", min=1, help="Embedding/index/search batch size."
+    ),
+    threshold: float = typer.Option(0.85, "--threshold", min=0.0, max=1.0),
+    model_name: str = typer.Option("all-MiniLM-L6-v2", "--model-name"),
+    max_train: int | None = typer.Option(None, "--max-train", min=1, help="Limit training rows."),
+    max_eval: int | None = typer.Option(
+        None, "--max-eval", min=1, help="Limit rows per benchmark."
+    ),
+    train_split: str | None = typer.Option(
+        None, "--train-split", help="HF training split (default: train)."
+    ),
+    benchmark_split: str = typer.Option("test", "--benchmark-split"),
+    config: str | None = typer.Option(None, "--config", help="HF training dataset configuration."),
+    output: str = typer.Option(
+        "report.pdf", "--output", "-o", help="Report path: .pdf, .json, or .html."
+    ),
+    output_json: str | None = typer.Option(
+        None, "--output-json", help="JSON sidecar for the dashboard."
+    ),
+    synthetic: bool = typer.Option(False, "--synthetic", help="Use offline benchmark stand-ins."),
+    no_progress: bool = typer.Option(False, "--no-progress"),
+) -> None:
+    """Audit public benchmarks using NVIDIA CUDA embeddings and GPU-preferred FAISS."""
+    from pathlib import Path
+
+    from verascan.gpu import cuda_info, gpu_audit
+
+    try:
+        extension = Path(output).suffix.lower()
+        if extension not in {".pdf", ".json", ".html"}:
+            raise ValueError("GPU report output must end in .pdf, .json, or .html.")
+        if output_json and Path(output).resolve() == Path(output_json).resolve():
+            raise ValueError("--output and --output-json must use different paths.")
+        info = cuda_info(device)
+        typer.echo(
+            f"CUDA device: {info['name']} ({info['device']}); runtime {info['cuda_version']}"
+        )
+        typer.echo(
+            f"Memory: {info['free_memory'] / 1024**3:.2f} GiB free / "
+            f"{info['total_memory'] / 1024**3:.2f} GiB total; batch size {batch_size}"
+        )
+        report = gpu_audit(
+            train,
+            benchmarks,
+            column=column,
+            device=device,
+            batch_size=batch_size,
+            threshold=threshold,
+            model_name=model_name,
+            max_train=max_train,
+            max_eval=max_eval,
+            train_split=train_split,
+            config=config,
+            benchmark_split=benchmark_split,
+            synthetic=synthetic,
+            show_progress=not no_progress,
+        )
+        typer.echo(report.summary())
+        if extension == ".pdf":
+            report.to_pdf(output)
+        elif extension == ".html":
+            report.to_html(output)
+        else:
+            report.to_json(output)
+        typer.echo(f"Report written to: {output}")
+        if output_json:
+            report.to_json(output_json)
+            typer.echo(f"JSON report written to: {output_json}")
+    except (OSError, ValueError, KeyError, ImportError, RuntimeError) as exc:
+        typer.secho(f"Error: {exc}", fg=typer.colors.RED, err=True)
+        raise typer.Exit(code=2) from exc
+
+
+@app.command()
+def dashboard(
+    report: str = typer.Argument(..., help="Path to a Verascan JSON report."),
+    demo: bool = typer.Option(
+        False, "--demo", help="Preview five planted pairs without changing the report."
+    ),
+) -> None:
+    """Open a local interactive Streamlit report dashboard."""
+    from verascan.dashboard import launch_dashboard
+
+    try:
+        code = launch_dashboard(report, demo=demo)
+    except (OSError, ValueError, ImportError) as exc:
+        typer.secho(f"Error: {exc}", fg=typer.colors.RED, err=True)
+        raise typer.Exit(code=2) from exc
+    raise typer.Exit(code=code)
 
 
 @app.command()
@@ -240,7 +343,7 @@ def audit(
         None,
         "--output",
         "-o",
-        help="Write report to this path (.html or .json).",
+        help="Write report to this path (.pdf, .json, or secondary .html).",
     ),
     output_json: str | None = typer.Option(
         None,
@@ -289,7 +392,10 @@ def audit(
     typer.echo(report.summary())
 
     if output:
-        if output.endswith(".html"):
+        if output.lower().endswith(".pdf"):
+            report.to_pdf(output)
+            typer.echo(f"PDF report written to: {output}")
+        elif output.endswith(".html"):
             report.to_html(output)
             typer.echo(f"HTML report written to: {output}")
         elif output.endswith(".json"):
