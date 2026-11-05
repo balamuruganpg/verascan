@@ -9,11 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.0.post1] - 2026-11-05
+
 ### Changed
 - Reworked the README around the 0.6.0 GPU and reporting workflow, with new
   dashboard captures, the supplied dark/light screenshots, a banner and a workflow diagram.
 - Package builds now derive the PyPI Markdown description from the README and
   convert screenshot references to absolute GitHub URLs. Removed obsolete HTML report previews.
+- Replaced the hardcoded PyPI version badge with a live badge and scoped the CI
+  badge to pushes on `main`.
 
 ## [0.6.0] - 2026-11-03
 

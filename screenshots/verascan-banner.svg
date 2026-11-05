@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1440" height="460" viewBox="0 0 1440 460" role="img" aria-labelledby="title desc">
   <title id="title">Verascan — evaluation integrity, made visible</title>
-  <desc id="desc">Version 0.6.0. Detect training and evaluation overlap. Investigate every match. Share the evidence with PDF, JSON and a local dashboard.</desc>
+  <desc id="desc">Detect training and evaluation overlap. Investigate every match. Share the evidence with PDF, JSON and a local dashboard.</desc>
   <rect width="1440" height="460" rx="24" fill="#080808"/>
   <g fill="none" stroke="#1c1c1c">
     <path d="M1030 0v460M1130 0v460M1230 0v460M1330 0v460M930 0v460"/>
@@ -10,7 +10,7 @@
   <path d="M75 69h10l7 20 7-20h10L97 101H87Z" fill="#080808"/>
   <text x="138" y="94" fill="#fff" font-family="Arial,Helvetica,sans-serif" font-size="38" font-weight="700" letter-spacing="-1.7">verascan</text>
   <rect x="1228" y="64" width="146" height="36" rx="18" fill="#151515" stroke="#363636"/>
-  <text x="1301" y="87" fill="#d5d5d5" font-family="Arial,Helvetica,sans-serif" font-size="12" text-anchor="middle" letter-spacing="1.8">VERSION 0.6.0</text>
+  <text x="1301" y="87" fill="#d5d5d5" font-family="Arial,Helvetica,sans-serif" font-size="12" text-anchor="middle" letter-spacing="1.8">GPU + REPORTING</text>
   <text x="64" y="205" fill="#fff" font-family="Arial,Helvetica,sans-serif" font-size="64" font-weight="600" letter-spacing="-2.8">Know what overlaps.</text>
   <text x="64" y="278" fill="#aaa" font-family="Arial,Helvetica,sans-serif" font-size="64" font-weight="600" letter-spacing="-2.8">See the evidence.</text>
   <text x="67" y="330" fill="#929292" font-family="Arial,Helvetica,sans-serif" font-size="20">Data contamination auditing for training sets and evaluation benchmarks.</text>

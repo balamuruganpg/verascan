@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="screenshots/verascan-banner.svg" alt="Verascan 0.6.0 — Know what overlaps. See the evidence." width="100%">
+  <img src="screenshots/verascan-banner.svg" alt="Verascan — Know what overlaps. See the evidence." width="100%">
 </p>
 
 <p align="center">
