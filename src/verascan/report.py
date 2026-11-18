@@ -5,6 +5,7 @@ from __future__ import annotations
 import difflib
 import html
 import json
+from collections.abc import Sequence
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -12,8 +13,12 @@ from typing import Any, cast
 
 import pandas as pd
 from jinja2 import Template
+from markupsafe import Markup
 
 from verascan._version import __version__
+from verascan.loaders import write_dataset
+
+_HIGH_CONTAMINATION_RATE = 0.05
 
 # ---------------------------------------------------------------------------
 # MatchRecord
@@ -61,15 +66,45 @@ def format_contamination_rate(rate: float) -> str:
     """Format contamination rate as a percentage string, never showing '0.0%' if rate > 0."""
     if rate <= 0.0:
         return "0.0%"
+    pct = rate * 100
     standard = f"{rate:.1%}"
+    if rate < _HIGH_CONTAMINATION_RATE and standard == "5.0%":
+        precise = f"{pct:.6f}".rstrip("0").rstrip(".")
+        return f"{precise}%" if precise != "5" else "<5.0%"
     if standard != "0.0%":
         return standard
-    pct = rate * 100.0
     for decimals in (3, 4, 5, 6):
         val = f"{pct:.{decimals}f}".rstrip("0").rstrip(".")
         if val and float(val) > 0:
             return f"{val}%"
-    return f"{pct:.6f}%"
+    return f"{pct:.6g}%"
+
+
+def calculate_contamination_rate(flagged: int, eval_size: int) -> float:
+    """Return the fraction of evaluation examples flagged by any method."""
+    return flagged / eval_size if eval_size else 0.0
+
+
+def contamination_status(total_matches: int, rate: float) -> str:
+    """Classify a report using the published Clean, Low and High scale."""
+    if not total_matches:
+        return "Clean"
+    return "Low" if rate < _HIGH_CONTAMINATION_RATE else "High"
+
+
+def threshold_methods(methods: Sequence[str]) -> list[str]:
+    return [method for method in methods if method in {"fuzzy", "semantic"}]
+
+
+def matching_criteria(methods: Sequence[str], threshold: float) -> list[tuple[str, str]]:
+    """Describe the criterion for engines with similarity or overlap scores."""
+    criteria = []
+    scored_methods = threshold_methods(methods)
+    if scored_methods:
+        criteria.append(("Threshold", f"{threshold} ({', '.join(scored_methods)})"))
+    if "ngram" in methods:
+        criteria.append(("N-gram", "any retained overlap"))
+    return criteria
 
 
 # ---------------------------------------------------------------------------
@@ -105,17 +140,20 @@ class ContaminationReport:
     @property
     def contamination_rate(self) -> float:
         """Fraction of eval examples that appear in at least one match."""
-        if self.eval_size == 0:
-            return 0.0
-        unique_eval = {m.eval_index for m in self.matches}
-        return len(unique_eval) / self.eval_size
+        return calculate_contamination_rate(len(self.contaminated_indices()), self.eval_size)
 
     @property
     def formatted_contamination_rate(self) -> str:
         """Contamination rate formatted as a percentage string, never showing '0.0%' if matches exist."""
-        if not self.matches or self.contamination_rate <= 0.0:
-            return "0.0%"
         return format_contamination_rate(self.contamination_rate)
+
+    @property
+    def contamination_status(self) -> str:
+        return contamination_status(self.total_matches, self.contamination_rate)
+
+    @property
+    def matching_criteria(self) -> list[tuple[str, str]]:
+        return matching_criteria(self.methods_used, self.threshold)
 
     @property
     def exact_count(self) -> int:
@@ -146,7 +184,7 @@ class ContaminationReport:
             f"  Train size      : {self.train_size:,}",
             f"  Eval size       : {self.eval_size:,}",
             f"  Methods         : {', '.join(self.methods_used)}",
-            f"  Threshold       : {self.threshold}",
+            *[f"  {label:<16}: {value}" for label, value in self.matching_criteria],
             "-" * 47,
             f"  Total matches   : {len(self.matches)}",
             f"  Contaminated    : {len(unique_eval)} / {self.eval_size} eval samples "
@@ -175,7 +213,8 @@ class ContaminationReport:
             "eval_size": self.eval_size,
             "threshold": self.threshold,
             "methods_used": self.methods_used,
-            "contamination_rate": round(self.contamination_rate, 6),
+            "threshold_methods": threshold_methods(self.methods_used),
+            "contamination_rate": self.contamination_rate,
             "total_matches": len(self.matches),
             "exact_matches": self.exact_count,
             "ngram_matches": self.ngram_count,
@@ -209,30 +248,32 @@ class ContaminationReport:
 
     def to_html(self, path: str) -> None:
         """Render a self-contained, modern HTML report."""
+        report = self.to_dict()
         enriched = []
-        for m in self.matches:
-            diff_html = _word_diff_html(m.train_text, m.eval_text)
-            benchmark = None
-            if self.eval_records is not None and m.eval_index < len(self.eval_records):
+        for m, match_dict in zip(self.matches, report["matches"]):
+            benchmark = match_dict.get("benchmark")
+            if (
+                benchmark is None
+                and self.eval_records is not None
+                and m.eval_index < len(self.eval_records)
+            ):
                 benchmark = self.eval_records[m.eval_index].get("benchmark")
             enriched.append(
                 {
                     **asdict(m),
                     "benchmark": benchmark,
-                    "diff_html": diff_html,
-                    "eval_text_escaped": html.escape(m.eval_text),
-                    "train_text_escaped": html.escape(m.train_text),
+                    "diff_html": Markup(_word_diff_html(m.train_text, m.eval_text)),
                 }
             )
 
         timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
         html_out = _HTML_TEMPLATE.render(
-            report=self.to_dict(),
+            report=report,
             matches=enriched,
-            contamination_pct=self.formatted_contamination_rate,
-            contamination_pct_raw=max(0.5, round(self.contamination_rate * 100, 2))
-            if self.matches
-            else 0.0,
+            status=self.contamination_status,
+            criteria=self.matching_criteria,
+            contamination_pct=format_contamination_rate(report["contamination_rate"]),
+            contamination_pct_raw=report["contamination_rate"] * 100,
             timestamp=timestamp,
             version=__version__,
         )
@@ -278,9 +319,7 @@ class ContaminationReport:
 
         When no contamination is found the cleaned set equals the original eval.
         """
-        flagged = self.contaminated_indices()
-        keep = [i for i in range(self._eval_row_count()) if i not in flagged]
-        return self._slice_eval(keep)
+        return self._slice_eval(self._eval_indices(contaminated=False))
 
     def contaminated_eval(self) -> list[str] | pd.DataFrame:
         """Return evaluation examples that were flagged as contaminated.
@@ -288,9 +327,11 @@ class ContaminationReport:
         Same return-type rules as :meth:`cleaned_eval`. Rows follow original
         eval order; each index appears once even if it matched multiple times.
         """
+        return self._slice_eval(self._eval_indices(contaminated=True))
+
+    def _eval_indices(self, *, contaminated: bool) -> list[int]:
         flagged = self.contaminated_indices()
-        keep = [i for i in range(self._eval_row_count()) if i in flagged]
-        return self._slice_eval(keep)
+        return [i for i in range(self._eval_row_count()) if (i in flagged) == contaminated]
 
     def to_cleaned(self, path: str) -> None:
         """Write the cleaned evaluation set to *path*.
@@ -304,26 +345,16 @@ class ContaminationReport:
         List inputs are written using the original text column name (default
         ``"text"``). Tabular inputs keep every original column.
         """
-        self._write_eval_export(self.cleaned_eval(), path)
+        self._write_eval_export(self._eval_indices(contaminated=False), path)
 
     def to_contaminated(self, path: str) -> None:
         """Write flagged evaluation examples to *path*. See :meth:`to_cleaned`."""
-        self._write_eval_export(self.contaminated_eval(), path)
+        self._write_eval_export(self._eval_indices(contaminated=True), path)
 
-    def _write_eval_export(self, data: list[str] | pd.DataFrame, path: str) -> None:
-        dest = Path(path)
-        ext = dest.suffix.lower()
-        if ext not in {".csv", ".jsonl", ".json"}:
-            raise ValueError(
-                f"Unsupported export extension '{ext}' for '{path}'. Supported: .csv, .jsonl, .json"
-            )
-        frame = pd.DataFrame({self.eval_column: data}) if isinstance(data, list) else data
-        if ext == ".csv":
-            frame.to_csv(dest, index=False)
-        elif ext == ".jsonl":
-            frame.to_json(dest, orient="records", lines=True, force_ascii=False)
-        else:
-            frame.to_json(dest, orient="records", lines=False, force_ascii=False)
+    def _write_eval_export(self, indices: list[int], path: str) -> None:
+        data = self._slice_eval(indices)
+        texts = [self.eval_texts[i] for i in indices] if self.eval_texts else None
+        write_dataset(data, path, column=self.eval_column, texts=texts)
 
 
 # ---------------------------------------------------------------------------
@@ -331,4 +362,4 @@ class ContaminationReport:
 # ---------------------------------------------------------------------------
 
 _TEMPLATE_PATH = Path(__file__).with_name("report.html")
-_HTML_TEMPLATE = Template(_TEMPLATE_PATH.read_text(encoding="utf-8"))
+_HTML_TEMPLATE = Template(_TEMPLATE_PATH.read_text(encoding="utf-8"), autoescape=True)

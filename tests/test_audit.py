@@ -217,9 +217,10 @@ def test_audit_report_methods_and_exports(tmp_path: Path):
 
     # 2. to_dict
     data = report.to_dict()
-    assert data["benchmarks"] == ["gsm8k", "mmlu"]
-    assert data["benchmark_counts"] == {"gsm8k": 1, "mmlu": 0}
-    assert data["matches"][0]["benchmark"] == "gsm8k"
+    assert data["synthetic"] is True
+    assert data["benchmarks"] == ["gsm8k (synthetic)", "mmlu (synthetic)"]
+    assert data["benchmark_counts"] == {"gsm8k (synthetic)": 1, "mmlu (synthetic)": 0}
+    assert data["matches"][0]["benchmark"] == "gsm8k (synthetic)"
 
     # 3. to_json
     json_path = tmp_path / "audit_report.json"

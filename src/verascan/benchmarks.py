@@ -324,7 +324,7 @@ def _load_hf_gsm8k(split: str = "test") -> list[dict[str, Any]]:
 
     records: list[dict[str, Any]] = []
     for item in ds:
-        q = str(item["question"])
+        q = item["question"]
         records.append(
             {
                 "benchmark": "gsm8k",
@@ -346,7 +346,7 @@ def _load_hf_humaneval(split: str = "test") -> list[dict[str, Any]]:
 
     records: list[dict[str, Any]] = []
     for item in ds:
-        p = str(item["prompt"])
+        p = item["prompt"]
         records.append(
             {
                 "benchmark": "humaneval",
@@ -366,7 +366,7 @@ def _load_hf_mmlu(split: str = "test") -> list[dict[str, Any]]:
     ds = datasets.load_dataset("cais/mmlu", "all", split=split)
     records: list[dict[str, Any]] = []
     for item in ds:
-        q = str(item["question"])
+        q = item["question"]
         records.append(
             {
                 "benchmark": "mmlu",
@@ -412,6 +412,7 @@ def load_benchmark(
     -------
     list[dict[str, Any]]
         List of records, each containing at least ``"benchmark"`` and ``"text"``.
+        Synthetic rows also carry ``"synthetic": True``.
     """
     clean_name = name.strip().lower()
     if clean_name not in SUPPORTED_BENCHMARKS:
@@ -420,7 +421,7 @@ def load_benchmark(
         )
 
     if synthetic:
-        return [dict(row) for row in SYNTHETIC_BENCHMARKS[clean_name]]
+        return [dict(row, synthetic=True) for row in SYNTHETIC_BENCHMARKS[clean_name]]
 
     if clean_name == "gsm8k":
         loader = _load_hf_gsm8k
@@ -441,7 +442,7 @@ def load_benchmark(
                 clean_name,
                 exc,
             )
-            return [dict(row) for row in SYNTHETIC_BENCHMARKS[clean_name]]
+            return [dict(row, synthetic=True) for row in SYNTHETIC_BENCHMARKS[clean_name]]
         if isinstance(exc, ImportError):
             raise
         raise RuntimeError(

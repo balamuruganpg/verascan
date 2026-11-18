@@ -145,7 +145,7 @@ def test_load_dataset_by_name_train_default_split(monkeypatch: pytest.MonkeyPatc
         calls.append((name, args, kwargs))
         return _MockDataset([{"text": "Sample 1", "label": 0}, {"text": "Sample 2", "label": 1}])
 
-    import datasets
+    datasets = pytest.importorskip("datasets")
 
     monkeypatch.setattr(datasets, "load_dataset", mock_load_dataset)
 
@@ -163,7 +163,7 @@ def test_load_dataset_by_name_eval_default_split(monkeypatch: pytest.MonkeyPatch
         calls.append((name, args, kwargs))
         return _MockDataset([{"text": "Eval sample"}])
 
-    import datasets
+    datasets = pytest.importorskip("datasets")
 
     monkeypatch.setattr(datasets, "load_dataset", mock_load_dataset)
 
@@ -179,7 +179,7 @@ def test_load_dataset_by_name_custom_split_and_config(monkeypatch: pytest.Monkey
         calls.append((name, args, kwargs))
         return _MockDataset([{"question": "What is 1+1?", "answer": "2"}])
 
-    import datasets
+    datasets = pytest.importorskip("datasets")
 
     monkeypatch.setattr(datasets, "load_dataset", mock_load_dataset)
 
@@ -199,7 +199,7 @@ def test_load_dataset_missing_datasets_package(monkeypatch: pytest.MonkeyPatch) 
 
 
 def test_load_dataset_neither_file_nor_loadable(monkeypatch: pytest.MonkeyPatch) -> None:
-    import datasets
+    datasets = pytest.importorskip("datasets")
 
     def mock_load_dataset(name: str, *args: Any, **kwargs: Any) -> Any:
         raise ValueError(f"Dataset '{name}' does not exist on Hugging Face hub")
@@ -212,7 +212,7 @@ def test_load_dataset_neither_file_nor_loadable(monkeypatch: pytest.MonkeyPatch)
 
 
 def test_check_with_dataset_names(monkeypatch: pytest.MonkeyPatch) -> None:
-    import datasets
+    datasets = pytest.importorskip("datasets")
 
     import verascan
 
@@ -244,7 +244,7 @@ def test_check_with_dataset_names(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_audit_with_dataset_name(monkeypatch: pytest.MonkeyPatch) -> None:
-    import datasets
+    datasets = pytest.importorskip("datasets")
 
     import verascan
     from verascan.benchmarks import SYNTHETIC_BENCHMARKS

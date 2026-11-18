@@ -10,6 +10,16 @@ import sys
 from pathlib import Path
 from typing import Any, cast
 
+from verascan.report import calculate_contamination_rate, contamination_status
+
+
+def report_metrics(data: dict[str, Any]) -> tuple[int, float, str]:
+    """Calculate report metrics from match rows, including for older exports."""
+    matches = data["matches"]
+    flagged = len({match["eval_index"] for match in matches})
+    rate = calculate_contamination_rate(flagged, data["eval_size"])
+    return flagged, rate, contamination_status(len(matches), rate)
+
 
 def load_report(path: str) -> dict[str, Any]:
     """Read and validate JSON reports, including the 0.5.0 export schema."""

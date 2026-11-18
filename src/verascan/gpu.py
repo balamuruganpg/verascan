@@ -11,7 +11,7 @@ from tqdm import tqdm
 
 from verascan.audit import AuditReport
 from verascan.benchmarks import load_benchmark, normalize_benchmarks
-from verascan.loaders import DataInput, load_texts
+from verascan.loaders import DataInput, load_eval_payload, load_texts
 from verascan.report import MatchRecord
 
 logger = logging.getLogger(__name__)
@@ -278,7 +278,7 @@ def gpu_audit(
             record = dict(row)
             record[column] = record["text"]
             records.append(record)
-    eval_texts = [str(row[column]) for row in records]
+    eval_texts = load_eval_payload(records, column=column).texts
     matches = (
         _gpu_matches(
             train_texts,

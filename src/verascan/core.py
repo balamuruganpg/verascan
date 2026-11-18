@@ -14,6 +14,16 @@ _VALID_METHODS = {"exact", "ngram", "fuzzy", "semantic"}
 _DEFAULT_METHODS = ["exact", "fuzzy"]
 
 
+def _validate_methods(methods: Sequence[str] | None) -> list[str]:
+    selected = list(_DEFAULT_METHODS if methods is None else methods)
+    if not selected:
+        raise ValueError("At least one detection method must be specified.")
+    for name in selected:
+        if name not in _VALID_METHODS:
+            raise ValueError(f"Unknown method '{name}'. Valid methods: {sorted(_VALID_METHODS)}")
+    return selected
+
+
 def check(
     train: DataInput,
     eval: DataInput,
@@ -79,16 +89,7 @@ def check(
     -------
     ContaminationReport
     """
-    # Validate methods
-    if methods is None:
-        methods_list = list(_DEFAULT_METHODS)
-    else:
-        methods_list = list(methods)
-        for method_name in methods_list:
-            if method_name not in _VALID_METHODS:
-                raise ValueError(
-                    f"Unknown method '{method_name}'. Valid methods: {sorted(_VALID_METHODS)}"
-                )
+    methods_list = _validate_methods(methods)
 
     # 1. Load texts (retain original eval rows for cleaned-eval export)
     effective_train_split = train_split if train_split is not None else split

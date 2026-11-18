@@ -226,7 +226,7 @@ def test_limits_custom_column_and_benchmark_provenance(gpu_deps: SimpleNamespace
     )
     assert report.train_size == 1 and report.eval_size == 2
     assert report.benchmarks == ["gsm8k", "humaneval"]
-    assert report.to_dict()["matches"][0]["benchmark"] == "gsm8k"
+    assert report.to_dict()["matches"][0]["benchmark"] == "gsm8k (synthetic)"
     assert report.eval_records is not None and len(report.eval_records) == 2
     assert report.cleaned_eval().shape[0] == 1
 
@@ -302,7 +302,7 @@ def test_gpu_cli_writes_pdf_and_json(
     assert "NVIDIA Test 1" in result.output and "12.6" in result.output
     assert "4.00" in result.output and "8.00" in result.output
     assert pdf.read_bytes()[:5] == b"%PDF-"
-    assert json.loads(data.read_text())["benchmark_counts"] == {"gsm8k": 1}
+    assert json.loads(data.read_text())["benchmark_counts"] == {"gsm8k (synthetic)": 1}
 
 
 def test_gpu_cli_no_cuda_clean_error(

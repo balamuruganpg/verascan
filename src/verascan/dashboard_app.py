@@ -13,9 +13,9 @@ import pandas as pd
 import streamlit as st
 
 from verascan._version import __version__
-from verascan.dashboard import demo_report, load_report
+from verascan.dashboard import demo_report, load_report, report_metrics
 from verascan.dashboard_style import dashboard_css, match_table_html, theme_palette
-from verascan.report import _word_diff_html
+from verascan.report import _word_diff_html, format_contamination_rate, matching_criteria
 
 st.set_page_config(
     page_title="Verascan | Audit overview", page_icon=":material/verified_user:", layout="wide"
@@ -45,18 +45,11 @@ except (OSError, ValueError) as exc:
 columns = ["eval_index", "train_index", "method", "benchmark", "score", "eval_text", "train_text"]
 frame = pd.DataFrame(data["matches"]).reindex(columns=columns)
 frame["benchmark"] = frame["benchmark"].fillna("custom")
-flagged = frame["eval_index"].nunique()
-rate = flagged / data["eval_size"] if data["eval_size"] else 0.0
-percent = f"{rate * 100:.6f}".rstrip("0").rstrip(".")
-rate_label = (percent if "." in percent else percent + ".0") + "%"
-if flagged and float(percent) == 0:
-    rate_label = f"{rate * 100:.6g}%"
-status, tone = (
-    ("Clean", "clean") if not flagged else (("Low", "low") if rate < 0.05 else ("High", "high"))
-)
-if not data["eval_size"]:
-    status, tone = "No evaluation data", "neutral"
+flagged, rate, status = report_metrics(data)
+rate_label = format_contamination_rate(rate)
+tone = status.lower()
 methods = list(dict.fromkeys(data.get("methods_used", []) + frame["method"].tolist()))
+criteria = matching_criteria(methods, data["threshold"]) if "threshold" in data else []
 benchmarks = list(dict.fromkeys(data.get("benchmarks", []) + frame["benchmark"].tolist()))
 source = "Demo / planted matches" if demo else report_path.name
 
@@ -96,10 +89,11 @@ st.html(f"""
 <div class="vs-hero-copy"><span class="vs-status"><span class="vs-live-dot"></span>{status}</span>
 <h2>{headline}</h2><p>{description}</p>
 <div class="vs-tags"><span>{html.escape(", ".join(methods) or "No methods recorded")}</span>
-<span>{html.escape(", ".join(benchmarks) or "Custom evaluation set")}</span></div></div>
+<span>{html.escape(", ".join(benchmarks) or "Custom evaluation set")}</span>
+{"".join(f"<span>{html.escape(label)}: {html.escape(value)}</span>" for label, value in criteria)}</div></div>
 <div class="vs-rate{" vs-rate-precise" if len(rate_label) > 7 else ""}"><div class="vs-eyebrow">CONTAMINATION RATE</div><strong>{rate_label}</strong>
 <span>{flagged:,} / {data["eval_size"]:,} evaluation examples</span>
-<div class="vs-rate-track" aria-hidden="true"><i style="width:{min(100, rate * 100):.6f}%"></i></div></div></section>
+<div class="vs-rate-track" aria-hidden="true"><i style="width:{min(100, rate * 100)}%"></i></div></div></section>
 """)
 
 with st.container(horizontal=True, key="metrics"):
@@ -248,5 +242,5 @@ else:
             )
 
 st.html(f"""<footer class="vs-footer"><span><strong>verascan</strong> / v{__version__}</span>
-<span>Clean = 0% · Low &lt; 5% · High ≥ 5% · Display rounded to 6 decimals</span>
+<span>Clean = 0% · Low &lt; 5% · High ≥ 5%</span>
 <a href="https://github.com/balamuruganpg/verascan" target="_blank" rel="noopener noreferrer">View source ↗</a></footer>""")

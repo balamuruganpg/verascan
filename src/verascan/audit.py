@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
 import pandas as pd
@@ -12,8 +13,8 @@ from verascan.benchmarks import (
     load_benchmark,
     normalize_benchmarks,
 )
-from verascan.core import check
-from verascan.loaders import DataInput
+from verascan.core import _validate_methods, check
+from verascan.loaders import DataInput, _is_file_path_syntax
 from verascan.report import ContaminationReport, MatchRecord
 
 
@@ -22,6 +23,17 @@ class AuditReport(ContaminationReport):
     """Contamination report specialized for public benchmark audits."""
 
     benchmarks: list[str] = field(default_factory=list)
+
+    def _benchmark_labels(self) -> dict[str, str]:
+        stand_ins = {
+            row["benchmark"]
+            for row in self.eval_records or []
+            if row.get("synthetic") is True
+        }
+        return {
+            name: f"{name} (synthetic)" if name in stand_ins else name
+            for name in self.benchmarks
+        }
 
     @property
     def benchmark_counts(self) -> dict[str, int]:
@@ -50,16 +62,17 @@ class AuditReport(ContaminationReport):
     def summary(self) -> str:
         """Return a human-readable summary string."""
         unique_eval = self.contaminated_indices()
+        labels = self._benchmark_labels()
         lines = [
             "",
             "=" * 47,
             "  Verascan Benchmark Audit Report",
             "=" * 47,
             f"  Train size      : {self.train_size:,}",
-            f"  Benchmarks      : {', '.join(self.benchmarks)}",
+            f"  Benchmarks      : {', '.join(labels.values())}",
             f"  Eval size       : {self.eval_size:,}",
             f"  Methods         : {', '.join(self.methods_used)}",
-            f"  Threshold       : {self.threshold}",
+            *[f"  {label:<16}: {value}" for label, value in self.matching_criteria],
             "-" * 47,
             f"  Total matches   : {len(self.matches)}",
             f"  Contaminated    : {len(unique_eval)} / {self.eval_size} eval samples "
@@ -80,7 +93,7 @@ class AuditReport(ContaminationReport):
             bm_counts = self.benchmark_counts
             for bm in self.benchmarks:
                 c = bm_counts.get(bm, 0)
-                lines.append(f"    - {bm:<12}: {c} contaminated")
+                lines.append(f"    - {labels[bm]:<12}: {c} contaminated")
 
         lines.append("=" * 47)
         lines.append("")
@@ -90,13 +103,18 @@ class AuditReport(ContaminationReport):
     def to_dict(self) -> dict[str, Any]:
         """Serialise the report to a plain dict, including benchmark breakdowns."""
         data = super().to_dict()
-        data["benchmarks"] = self.benchmarks
-        data["benchmark_counts"] = self.benchmark_counts
+        labels = self._benchmark_labels()
+        data["synthetic"] = any(name != label for name, label in labels.items())
+        data["benchmarks"] = list(labels.values())
+        data["benchmark_counts"] = {
+            labels.get(name, name): count for name, count in self.benchmark_counts.items()
+        }
         if self.eval_records is not None:
             for match_dict in data.get("matches", []):
                 idx = match_dict.get("eval_index")
                 if idx is not None and idx < len(self.eval_records):
-                    match_dict["benchmark"] = self.eval_records[idx].get("benchmark", "unknown")
+                    name = self.eval_records[idx].get("benchmark", "unknown")
+                    match_dict["benchmark"] = labels.get(name, name)
         return data
 
 
@@ -138,7 +156,8 @@ def audit(
     column:
         Column name in *train* to extract text from.
     split:
-        Split to evaluate. If starts with "train", applied to *train*; otherwise applied to benchmark presets.
+        Alias for the training split if it starts with "train", or for the
+        benchmark split otherwise. A training split requires a dataset name.
     train_split:
         Specific split to load when *train* is a Hugging Face dataset name.
     config:
@@ -146,7 +165,8 @@ def audit(
     train_config:
         Specific configuration name for *train*.
     benchmark_split:
-        Split for benchmark presets (default: ``"test"``).
+        Split for benchmark presets (default: ``"test"``). A non-default value
+        takes precedence over a benchmark split supplied through *split*.
     synthetic:
         If True, use synthetic stand-ins for offline / fast testing.
     allow_synthetic:
@@ -169,22 +189,21 @@ def audit(
     AuditReport
         A specialized :class:`ContaminationReport` containing benchmark audit results.
     """
+    methods = _validate_methods(methods)
     normalized_bms = normalize_benchmarks(benchmarks)
 
-    # Determine train split vs benchmark split
-    if train_split is not None:
-        eff_train_split = train_split
-        eff_bm_split = benchmark_split if benchmark_split != "test" else (split or "test")
-    elif split is not None:
-        if "train" in split or split not in {"test", "validation", "dev"}:
-            eff_train_split = split
-            eff_bm_split = benchmark_split
-        else:
-            eff_train_split = None
+    eff_train_split = train_split
+    eff_bm_split = benchmark_split
+    if split is not None:
+        if split.startswith("train"):
+            if eff_train_split is None:
+                eff_train_split = split
+        elif benchmark_split == "test":
             eff_bm_split = split
-    else:
-        eff_train_split = None
-        eff_bm_split = benchmark_split
+    if eff_train_split is not None and (
+        not isinstance(train, str) or _is_file_path_syntax(train) or Path(train).is_file()
+    ):
+        raise ValueError("An audit train split requires a Hugging Face dataset name.")
 
     eff_train_config = train_config if train_config is not None else config
 
@@ -198,7 +217,7 @@ def audit(
         )
         all_records.extend(records)
 
-    eval_df = pd.DataFrame(all_records)
+    eval_df = pd.DataFrame(all_records) if all_records else pd.DataFrame(columns=["text"])
     if column != "text" and "text" in eval_df.columns:
         eval_df[column] = eval_df["text"]
 

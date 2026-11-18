@@ -6,6 +6,8 @@ Locality-Sensitive Hashing for fast approximate Jaccard similarity.
 
 from __future__ import annotations
 
+from collections import defaultdict
+
 from datasketch import MinHash, MinHashLSH
 from tqdm import tqdm
 
@@ -44,22 +46,42 @@ def find_fuzzy_matches(
     train_texts, eval_texts:
         Lists of raw text strings.
     threshold:
-        Minimum estimated Jaccard similarity to report (0–1).
+        Minimum estimated Jaccard similarity to report (0–1). At 1, compare
+        complete MinHash signatures directly.
     num_perm:
         Number of MinHash permutations (higher → more accurate but slower).
     show_progress:
         Show tqdm progress bars.
     """
-    # Build LSH index from training data.
-    lsh = MinHashLSH(threshold=threshold, num_perm=num_perm)
+    if not 0 <= threshold <= 1:
+        raise ValueError("Fuzzy threshold must be between 0 and 1.")
+    if num_perm < 2:
+        raise ValueError("Fuzzy matching requires at least two MinHash permutations.")
+
+    signatures: dict[bytes, list[int]] = defaultdict(list)
+    lsh = None
+    if threshold < 1:
+        try:
+            lsh = MinHashLSH(threshold=threshold, num_perm=num_perm)
+        except ValueError as exc:
+            if "b < 2" not in str(exc):
+                raise
+            raise ValueError(
+                f"Fuzzy threshold {threshold:g} is too high for LSH with {num_perm} "
+                "MinHash permutations. Use a lower threshold or 1 for identical signatures."
+            ) from exc
+
     train_minhashes: list[MinHash] = []
 
     for idx, text in enumerate(
         tqdm(train_texts, desc="MinHash train", disable=not show_progress, leave=False)
     ):
         mh = _make_minhash(_shingle(text), num_perm)
-        train_minhashes.append(mh)
-        lsh.insert(f"train_{idx}", mh)
+        if lsh is None:
+            signatures[mh.hashvalues.tobytes()].append(idx)
+        else:
+            train_minhashes.append(mh)
+            lsh.insert(f"train_{idx}", mh)
 
     # Query each eval text.
     matches: list[MatchRecord] = []
@@ -67,12 +89,14 @@ def find_fuzzy_matches(
         tqdm(eval_texts, desc="Fuzzy scan", disable=not show_progress, leave=False)
     ):
         eval_mh = _make_minhash(_shingle(eval_text), num_perm)
-        candidates = lsh.query(eval_mh)
+        candidates = (
+            iter(signatures.get(eval_mh.hashvalues.tobytes(), []))
+            if lsh is None
+            else (int(key.split("_", 1)[1]) for key in lsh.query(eval_mh))
+        )
 
-        for key in candidates:
-            train_idx = int(key.split("_", 1)[1])
-            # Compute actual estimated Jaccard for the pair.
-            score = eval_mh.jaccard(train_minhashes[train_idx])
+        for train_idx in candidates:
+            score = 1.0 if lsh is None else eval_mh.jaccard(train_minhashes[train_idx])
             if score >= threshold:
                 matches.append(
                     MatchRecord(

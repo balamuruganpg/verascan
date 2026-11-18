@@ -140,17 +140,21 @@ def write_pdf(report: ContaminationReport, path: str) -> None:
     )
     data = report.to_dict()
     flagged = len(report.contaminated_indices())
-    status = (
-        "CLEAN"
-        if not flagged
-        else ("LOW OVERLAP" if report.contamination_rate < 0.05 else "HIGH OVERLAP")
-    )
-    if not report.eval_size:
-        status = "NO EVALUATION DATA"
-    elif flagged:
-        styles["Rate"].textColor = colors.HexColor(
-            "#ffb4c4" if report.contamination_rate >= 0.05 else "#f8c978"
-        )
+    category = report.contamination_status
+    status = {"Clean": "CLEAN", "Low": "LOW OVERLAP", "High": "HIGH OVERLAP"}[category]
+    rate_style = styles["Rate"]
+    rate_label = report.formatted_contamination_rate
+    rate_column = doc.width * 0.44
+    left_padding, right_padding = 22, 18
+    usable_width = rate_column - left_padding - right_padding
+    text_width = pdfmetrics.stringWidth(rate_label, rate_style.fontName, rate_style.fontSize)
+    if text_width >= usable_width:
+        # Leave room for rounding in ReportLab's paragraph layout.
+        scale = (usable_width - 1) / text_width
+        rate_style.fontSize *= scale
+        rate_style.leading *= scale
+    if flagged:
+        rate_style.textColor = colors.HexColor("#ffb4c4" if category == "High" else "#f8c978")
     cover = LongTable(
         [
             [
@@ -167,16 +171,17 @@ def write_pdf(report: ContaminationReport, path: str) -> None:
                 [
                     Paragraph(status, styles["CoverLabel"]),
                     Spacer(1, 8),
-                    Paragraph(report.formatted_contamination_rate, styles["Rate"]),
+                    Paragraph(_safe(rate_label), rate_style),
                     Spacer(1, 8),
                     Paragraph(
-                        f"{flagged:,} / {report.eval_size:,} evaluation examples flagged",
+                        f"{flagged:,} / {report.eval_size:,} evaluation examples flagged"
+                        if report.eval_size else "No evaluation examples were available.",
                         styles["CoverNote"],
                     ),
                 ],
             ]
         ],
-        colWidths=[doc.width * 0.56, doc.width * 0.44],
+        colWidths=[doc.width - rate_column, rate_column],
         cornerRadii=[12, 12, 12, 12],
     )
     cover.setStyle(
@@ -184,8 +189,8 @@ def write_pdf(report: ContaminationReport, path: str) -> None:
             [
                 ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#101e2c")),
                 ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-                ("LEFTPADDING", (0, 0), (-1, -1), 22),
-                ("RIGHTPADDING", (0, 0), (-1, -1), 18),
+                ("LEFTPADDING", (0, 0), (-1, -1), left_padding),
+                ("RIGHTPADDING", (0, 0), (-1, -1), right_padding),
                 ("TOPPADDING", (0, 0), (-1, -1), 30),
                 ("BOTTOMPADDING", (0, 0), (-1, -1), 30),
             ]
@@ -226,7 +231,7 @@ def write_pdf(report: ContaminationReport, path: str) -> None:
     summary = [
         ("Methods", ", ".join(report.methods_used) or "None"),
         ("Benchmarks", ", ".join(data.get("benchmarks", [])) or "Custom evaluation set"),
-        ("Similarity threshold", str(report.threshold)),
+        *report.matching_criteria,
         ("Generated (UTC)", datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M")),
     ]
     table = LongTable(

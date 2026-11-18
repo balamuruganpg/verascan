@@ -9,6 +9,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.1] - 2026-11-18
+
+### Fixed
+
+- Preserve literal CSV text, reject missing text values in tabular inputs,
+  and reload cleaned, contaminated, and split dataset exports in every supported format.
+- Reject empty detection method lists and compare full MinHash signatures at a
+  fuzzy threshold of 1. Identify the engines governed by the similarity threshold.
+- Align contamination rates and status cutoffs across report formats and the
+  dashboard, fit small rates in PDF covers, and escape benchmark labels in HTML.
+- Route audit split aliases to the intended dataset and label synthetic
+  benchmarks in reports.
+- Handle report filename suffixes case-insensitively and report CLI user errors
+  with exit code 2, including missing optional dependencies.
+- Distinguish evaluation ratios from row counts on the CLI and show moved and
+  dropped rows relative to the original split input.
+
 ## [0.6.0.post1] - 2026-11-05
 
 ### Changed

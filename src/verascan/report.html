@@ -512,7 +512,9 @@
       </div>
     </div>
     <div class='meta-badge-group'>
-      <span class='badge badge-default'>Threshold: {{ report.threshold }}</span>
+      {% for label, value in criteria %}
+      <span class='badge badge-default'>{{ label }}: {{ value }}</span>
+      {% endfor %}
       <span class='badge badge-default'>Methods: {{ report.methods_used | join(', ') }}</span>
       <span class='badge badge-default'>{{ timestamp }}</span>
     </div>
@@ -522,13 +524,17 @@
   <section class='status-banner'>
     <div class='status-header'>
       <div class='status-title'>
-        {% if report.contamination_rate == 0 %}
+        {% if status == "Clean" %}
           <div class='status-indicator status-clean'></div>
           <div class='status-text'>
             <h2>Clean — No Contamination Detected</h2>
+            {% if report.eval_size %}
             <p>0 of {{ report.eval_size }} evaluation examples leaked into the training set.</p>
+            {% else %}
+            <p>No evaluation examples were available.</p>
+            {% endif %}
           </div>
-        {% elif report.contamination_rate < 0.03 %}
+        {% elif status == "Low" %}
           <div class='status-indicator status-warn'></div>
           <div class='status-text'>
             <h2>Low Risk Contamination ({{ contamination_pct }})</h2>
@@ -537,19 +543,19 @@
         {% else %}
           <div class='status-indicator status-danger'></div>
           <div class='status-text'>
-            <h2>Significant Contamination Detected ({{ contamination_pct }})</h2>
+            <h2>High Risk Contamination ({{ contamination_pct }})</h2>
             <p>{{ report.total_matches }} matching {% if report.total_matches == 1 %}pair{% else %}pairs{% endif %} detected — evaluation results may be inflated.</p>
           </div>
         {% endif %}
       </div>
       <div class='status-score'>
-        <span class='metric-value' style='font-size:1.6rem; color: {% if report.contamination_rate == 0 %}var(--success){% elif report.contamination_rate < 0.03 %}var(--fuzzy){% else %}var(--exact){% endif %};'>
+        <span class='metric-value' style='font-size:1.6rem; color: {% if status == "Clean" %}var(--success){% elif status == "Low" %}var(--fuzzy){% else %}var(--exact){% endif %};'>
           {{ contamination_pct }}
         </span>
       </div>
     </div>
     <div class='progress-container'>
-      <div class='progress-bar {% if report.contamination_rate == 0 %}progress-bar-clean{% elif report.contamination_rate < 0.03 %}progress-bar-warn{% else %}progress-bar-danger{% endif %}'
+      <div class='progress-bar {% if status == "Clean" %}progress-bar-clean{% elif status == "Low" %}progress-bar-warn{% else %}progress-bar-danger{% endif %}'
            style='width: {{ [contamination_pct_raw, 100]|min }}%;'></div>
     </div>
   </section>
@@ -639,11 +645,11 @@
     {% if report.benchmarks %}
     <div class='filter-tabs benchmark-tabs' style='width: 100%; padding-top: 0.6rem; border-top: 1px solid var(--border-subtle);'>
       <span style='font-size:0.8rem; font-weight:600; color:var(--text-secondary); align-self:center; margin-right:0.25rem;'>Benchmark:</span>
-      <button class='filter-btn benchmark-btn active' onclick='filterBenchmark(`all`)' id='bm-all'>
+      <button class='filter-btn benchmark-btn active' onclick='filterBenchmark(this)'>
         All Benchmarks <span class='count-chip'>{{ matches | length }}</span>
       </button>
       {% for bm in report.benchmarks %}
-      <button class='filter-btn benchmark-btn' onclick='filterBenchmark(`{{ bm }}`)' id='bm-{{ bm }}'>
+      <button class='filter-btn benchmark-btn' onclick='filterBenchmark(this)' data-benchmark='{{ bm }}'>
         {{ bm }} <span class='count-chip'>{{ report.benchmark_counts.get(bm, 0) if report.benchmark_counts else 0 }}</span>
       </button>
       {% endfor %}
@@ -654,7 +660,7 @@
   <!-- Flagged Pairs List -->
   <section class='matches-list' id='matchesList'>
     {% for m in matches %}
-    <div class='match-card' data-method='{{ m.method }}' data-benchmark='{{ m.benchmark or "" }}' data-score='{{ m.score }}' data-eval-idx='{{ m.eval_index }}' data-train-idx='{{ m.train_index }}' data-text='{{ m.eval_text_escaped }} {{ m.train_text_escaped }}'>
+    <div class='match-card' data-method='{{ m.method }}' data-benchmark='{{ m.benchmark or "" }}' data-score='{{ m.score }}' data-eval-idx='{{ m.eval_index }}' data-train-idx='{{ m.train_index }}' data-text='{{ m.eval_text }} {{ m.train_text }}'>
       <div class='match-card-header'>
         <div class='match-card-left'>
           <span class='match-idx'>#{{ loop.index }}</span>
@@ -682,7 +688,7 @@
             <span>Evaluation Text</span>
             <span class='text-label-tag'>Index #{{ m.eval_index }}</span>
           </div>
-          <div class='text-content'>{{ m.eval_text_escaped }}</div>
+          <div class='text-content'>{{ m.eval_text }}</div>
         </div>
 
         <div class='text-block raw-text-block'>
@@ -690,7 +696,7 @@
             <span>Training Text</span>
             <span class='text-label-tag'>Index #{{ m.train_index }}</span>
           </div>
-          <div class='text-content'>{{ m.train_text_escaped }}</div>
+          <div class='text-content'>{{ m.train_text }}</div>
         </div>
       </div>
     </div>
@@ -714,7 +720,7 @@
 
 <script>
   let currentMethod = 'all';
-  let currentBenchmark = 'all';
+  let currentBenchmark = null;
   let searchQuery = '';
   let detailsExpanded = true;
 
@@ -726,11 +732,10 @@
     applyFilters();
   }
 
-  function filterBenchmark(bm) {
-    currentBenchmark = bm;
+  function filterBenchmark(button) {
+    currentBenchmark = button.getAttribute('data-benchmark');
     document.querySelectorAll('.benchmark-btn').forEach(btn => btn.classList.remove('active'));
-    const activeBtn = document.getElementById('bm-' + bm);
-    if (activeBtn) activeBtn.classList.add('active');
+    button.classList.add('active');
     applyFilters();
   }
 
@@ -749,7 +754,7 @@
       const trainIdx = card.getAttribute('data-train-idx');
 
       const matchesMethod = (currentMethod === 'all' || method === currentMethod);
-      const matchesBenchmark = (currentBenchmark === 'all' || benchmark === currentBenchmark);
+      const matchesBenchmark = (currentBenchmark === null || benchmark === currentBenchmark);
       const matchesSearch = (!searchQuery || text.includes(searchQuery) || evalIdx === searchQuery || trainIdx === searchQuery);
 
       if (matchesMethod && matchesBenchmark && matchesSearch) {

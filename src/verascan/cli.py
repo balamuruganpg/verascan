@@ -2,16 +2,43 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+from typing import NoReturn
+
 import typer
 
 from verascan._version import __version__
+from verascan.report import ContaminationReport
+
+_USER_ERRORS = (OSError, ValueError, KeyError, TypeError, ImportError, RuntimeError)
 
 app = typer.Typer(
     name="verascan",
     help="Detect data contamination between training and evaluation sets.",
     add_completion=False,
     no_args_is_help=True,
+    rich_markup_mode=None,
 )
+
+
+def _fail(exc: Exception) -> NoReturn:
+    typer.secho(f"Error: {exc}", fg=typer.colors.RED, err=True)
+    raise typer.Exit(code=2) from exc
+
+
+def _write_report(
+    report: ContaminationReport, path: str, *, default: str, label_format: bool = True
+) -> None:
+    extension = Path(path).suffix.lower()
+    if extension == ".pdf":
+        kind, writer = "PDF", report.to_pdf
+    elif extension == ".html" or (extension != ".json" and default == "html"):
+        kind, writer = "HTML", report.to_html
+    else:
+        kind, writer = "JSON", report.to_json
+    writer(path)
+    label = f"{kind} report" if label_format else "Report"
+    typer.echo(f"{label} written to: {path}")
 
 
 def _version_callback(value: bool) -> None:
@@ -96,35 +123,14 @@ def check(
             config=config,
             show_progress=not no_progress,
         )
-    except (FileNotFoundError, ValueError, KeyError) as exc:
-        typer.secho(f"Error: {exc}", fg=typer.colors.RED, err=True)
-        raise typer.Exit(code=2) from exc
-
-    typer.echo(report.summary())
-
-    # Write output file if requested.
-    if output:
-        if output.lower().endswith(".pdf"):
-            report.to_pdf(output)
-            typer.echo(f"PDF report written to: {output}")
-        elif output.endswith(".html"):
-            report.to_html(output)
-            typer.echo(f"HTML report written to: {output}")
-        elif output.endswith(".json"):
-            report.to_json(output)
-            typer.echo(f"JSON report written to: {output}")
-        else:
-            # Default to JSON.
-            report.to_json(output)
-            typer.echo(f"JSON report written to: {output}")
-
-    if output_cleaned:
-        try:
+        typer.echo(report.summary())
+        if output:
+            _write_report(report, output, default="json")
+        if output_cleaned:
             report.to_cleaned(output_cleaned)
-        except ValueError as exc:
-            typer.secho(f"Error: {exc}", fg=typer.colors.RED, err=True)
-            raise typer.Exit(code=2) from exc
-        typer.echo(f"Cleaned eval written to: {output_cleaned}")
+            typer.echo(f"Cleaned eval written to: {output_cleaned}")
+    except _USER_ERRORS as exc:
+        _fail(exc)
 
     # CI gate.
     if report.contamination_rate > fail_above:
@@ -169,8 +175,6 @@ def gpu(
     no_progress: bool = typer.Option(False, "--no-progress"),
 ) -> None:
     """Audit public benchmarks using NVIDIA CUDA embeddings and GPU-preferred FAISS."""
-    from pathlib import Path
-
     from verascan.gpu import cuda_info, gpu_audit
 
     try:
@@ -204,19 +208,12 @@ def gpu(
             show_progress=not no_progress,
         )
         typer.echo(report.summary())
-        if extension == ".pdf":
-            report.to_pdf(output)
-        elif extension == ".html":
-            report.to_html(output)
-        else:
-            report.to_json(output)
-        typer.echo(f"Report written to: {output}")
+        _write_report(report, output, default="json", label_format=False)
         if output_json:
             report.to_json(output_json)
             typer.echo(f"JSON report written to: {output_json}")
-    except (OSError, ValueError, KeyError, ImportError, RuntimeError) as exc:
-        typer.secho(f"Error: {exc}", fg=typer.colors.RED, err=True)
-        raise typer.Exit(code=2) from exc
+    except _USER_ERRORS as exc:
+        _fail(exc)
 
 
 @app.command()
@@ -231,17 +228,27 @@ def dashboard(
 
     try:
         code = launch_dashboard(report, demo=demo)
-    except (OSError, ValueError, ImportError) as exc:
-        typer.secho(f"Error: {exc}", fg=typer.colors.RED, err=True)
-        raise typer.Exit(code=2) from exc
+    except _USER_ERRORS as exc:
+        _fail(exc)
     raise typer.Exit(code=code)
+
+
+def _parse_eval_size(value: str) -> float | int:
+    try:
+        return int(value)
+    except ValueError:
+        try:
+            ratio = float(value)
+        except ValueError as exc:
+            raise ValueError("--eval-size requires a ratio or an integer row count.") from exc
+        return int(ratio) if ratio > 1 and ratio.is_integer() else ratio
 
 
 @app.command()
 def split(
     input: str = typer.Option(..., "--input", "-i", help="Path to input dataset (CSV or JSONL)."),
-    eval_size: float = typer.Option(
-        0.2, "--eval-size", help="Target evaluation ratio (0-1) or row count."
+    eval_size: str = typer.Option(
+        "0.2", "--eval-size", help="Evaluation ratio (e.g. 1.0) or integer row count (e.g. 1)."
     ),
     output_train: str | None = typer.Option(
         None, "--output-train", help="Path to write train split (.csv, .jsonl, or .json)."
@@ -253,7 +260,7 @@ def split(
         "exact,fuzzy",
         "--methods",
         "-m",
-        help="Comma-separated detection methods: exact, fuzzy, semantic.",
+        help="Comma-separated detection methods: exact, ngram, fuzzy, semantic.",
     ),
     threshold: float = typer.Option(0.85, "--threshold", help="Similarity threshold (0-1)."),
     column: str = typer.Option("text", "--column", "-c", help="Name of the text column."),
@@ -263,17 +270,17 @@ def split(
     ),
     no_progress: bool = typer.Option(False, "--no-progress", help="Disable progress bars."),
 ) -> None:
-    """Create a leak-free train/eval split from a dataset."""
-    from verascan.split import split as run_split
-
-    method_list = [m.strip() for m in methods.split(",") if m.strip()]
-    parsed_eval_size: float | int = (
-        int(eval_size) if eval_size.is_integer() and eval_size >= 1 else eval_size
-    )
+    """Create a train/eval split and remove overlap found by the selected methods."""
+    from verascan.core import _validate_methods
+    from verascan.loaders import load_eval_payload
+    from verascan.split import _split_loaded
 
     try:
-        train_data, eval_data = run_split(
-            data=input,
+        method_list = _validate_methods([m.strip() for m in methods.split(",") if m.strip()])
+        parsed_eval_size = _parse_eval_size(eval_size)
+        payload = load_eval_payload(input, column=column)
+        _, _, summary = _split_loaded(
+            payload,
             eval_size=parsed_eval_size,
             methods=method_list,
             threshold=threshold,
@@ -284,35 +291,14 @@ def split(
             output_eval=output_eval,
             show_progress=not no_progress,
         )
-    except (FileNotFoundError, ValueError, KeyError, TypeError) as exc:
-        typer.secho(f"Error: {exc}", fg=typer.colors.RED, err=True)
-        raise typer.Exit(code=2) from exc
+    except _USER_ERRORS as exc:
+        _fail(exc)
 
-    train_len = len(train_data)
-    eval_len = len(eval_data)
-    total_len = train_len + eval_len
-
-    lines = [
-        "",
-        "=" * 47,
-        "  Verascan Split Summary",
-        "=" * 47,
-        f"  Total samples   : {total_len:,}",
-        f"  Methods         : {', '.join(method_list)}",
-        f"  Threshold       : {threshold}",
-        f"  Seed            : {seed}",
-        "-" * 47,
-        f"  Train split     : {train_len:,} samples ({train_len / max(1, total_len):.1%})",
-        f"  Eval split      : {eval_len:,} samples ({eval_len / max(1, total_len):.1%})",
-        "  Residual leakage: 0.0% (guaranteed leak-free)",
-        "=" * 47,
-    ]
+    typer.echo(summary.summary())
     if output_train:
-        lines.append(f"  Train set written to: {output_train}")
+        typer.echo(f"  Train set written to: {output_train}")
     if output_eval:
-        lines.append(f"  Eval set written to : {output_eval}")
-    lines.append("")
-    typer.echo("\n".join(lines))
+        typer.echo(f"  Eval set written to : {output_eval}")
 
 
 @app.command()
@@ -358,7 +344,15 @@ def audit(
     split: str | None = typer.Option(
         None,
         "--split",
-        help="Hugging Face split for training data (default: train[:2000]).",
+        help="Hugging Face split or slice. Names starting with 'train' apply to training data; other names apply to benchmarks.",
+    ),
+    train_split: str | None = typer.Option(
+        None,
+        "--train-split",
+        help="Explicit training dataset split (default: train[:2000]).",
+    ),
+    benchmark_split: str = typer.Option(
+        "test", "--benchmark-split", help="Explicit split for benchmark datasets."
     ),
     config: str | None = typer.Option(
         None,
@@ -381,33 +375,25 @@ def audit(
             threshold=threshold,
             column=column,
             split=split,
+            train_split=train_split,
+            benchmark_split=benchmark_split,
             config=config,
             synthetic=synthetic,
             show_progress=not no_progress,
         )
-    except (FileNotFoundError, ValueError, KeyError, ImportError, RuntimeError) as exc:
-        typer.secho(f"Error: {exc}", fg=typer.colors.RED, err=True)
-        raise typer.Exit(code=2) from exc
-
-    typer.echo(report.summary())
-
-    if output:
-        if output.lower().endswith(".pdf"):
-            report.to_pdf(output)
-            typer.echo(f"PDF report written to: {output}")
-        elif output.endswith(".html"):
-            report.to_html(output)
-            typer.echo(f"HTML report written to: {output}")
-        elif output.endswith(".json"):
-            report.to_json(output)
-            typer.echo(f"JSON report written to: {output}")
-        else:
-            report.to_html(output)
-            typer.echo(f"Report written to: {output}")
-
-    if output_json:
-        report.to_json(output_json)
-        typer.echo(f"JSON report written to: {output_json}")
+        typer.echo(report.summary())
+        if output:
+            _write_report(
+                report,
+                output,
+                default="html",
+                label_format=Path(output).suffix.lower() in {".pdf", ".html", ".json"},
+            )
+        if output_json:
+            report.to_json(output_json)
+            typer.echo(f"JSON report written to: {output_json}")
+    except _USER_ERRORS as exc:
+        _fail(exc)
 
     # CI gate.
     if report.contamination_rate > fail_above:

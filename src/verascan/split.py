@@ -1,8 +1,7 @@
 """Dataset splitting utility to prevent train/eval data contamination.
 
-Creates a train/eval split and guarantees zero exact, fuzzy, or semantic
-leakage between the two splits by detecting candidate leakage and moving
-contaminated eval examples out of eval.
+Creates a train/eval split by detecting overlap with the selected methods and
+moving or dropping contaminated evaluation examples.
 """
 
 from __future__ import annotations
@@ -15,11 +14,9 @@ from typing import Any, cast
 
 import pandas as pd
 
-from verascan.core import check
-from verascan.loaders import DataInput, LoadedEval, load_eval_payload
-
-_VALID_METHODS = {"exact", "ngram", "fuzzy", "semantic"}
-_DEFAULT_METHODS = ["exact", "fuzzy"]
+from verascan.core import _validate_methods, check
+from verascan.loaders import DataInput, LoadedEval, load_eval_payload, write_dataset
+from verascan.report import matching_criteria
 
 
 @dataclass(frozen=True)
@@ -41,21 +38,28 @@ class SplitResult:
         return self.eval_size / self.total_samples
 
     def summary(self) -> str:
-        """Return a human-readable summary string and print it."""
+        """Return a summary with sizes relative to the input dataset."""
+        dropped = self.total_samples - self.train_size - self.eval_size
+        methods = ", ".join(self.methods_used)
         lines = [
             "",
             "=" * 47,
             "  Verascan Split Summary",
             "=" * 47,
             f"  Total samples   : {self.total_samples:,}",
-            f"  Methods         : {', '.join(self.methods_used)}",
-            f"  Threshold       : {self.threshold}",
+            f"  Methods         : {methods}",
+            *[
+                f"  {label:<16}: {value}"
+                for label, value in matching_criteria(self.methods_used, self.threshold)
+            ],
             f"  Seed            : {self.seed}",
             "-" * 47,
-            f"  Train size      : {self.train_size:,} ({self.train_size / max(1, self.total_samples):.1%})",
-            f"  Eval size       : {self.eval_size:,} ({self.eval_ratio:.1%})",
+            f"  Train split     : {self.train_size:,} samples "
+            f"({self.train_size / max(1, self.total_samples):.1%} of input)",
+            f"  Eval split      : {self.eval_size:,} samples ({self.eval_ratio:.1%} of input)",
+            f"  Dropped rows    : {dropped:,}",
             f"  Purified leakage: {self.moved_count:,} candidate eval samples moved to train",
-            "  Residual leakage: 0.0% (guaranteed leak-free)",
+            f"  Residual leakage: 0.0% with {methods} on retained rows",
             "=" * 47,
             "",
         ]
@@ -71,29 +75,6 @@ def _slice_payload(payload: LoadedEval, indices: list[int]) -> list[str] | pd.Da
             return cast("pd.DataFrame", frame.iloc[0:0].copy())
         return cast("pd.DataFrame", frame.iloc[indices].reset_index(drop=True))
     return [payload.texts[i] for i in indices]
-
-
-def _write_split_export(
-    data: list[str] | pd.DataFrame,
-    path: str,
-    *,
-    column: str = "text",
-) -> None:
-    """Save split data to disk as CSV, JSONL, or JSON."""
-    dest = Path(path)
-    dest.parent.mkdir(parents=True, exist_ok=True)
-    ext = dest.suffix.lower()
-    if ext not in {".csv", ".jsonl", ".json"}:
-        raise ValueError(
-            f"Unsupported export extension '{ext}' for '{path}'. Supported: .csv, .jsonl, .json"
-        )
-    frame = pd.DataFrame({column: data}) if isinstance(data, list) else data
-    if ext == ".csv":
-        frame.to_csv(dest, index=False)
-    elif ext == ".jsonl":
-        frame.to_json(dest, orient="records", lines=True, force_ascii=False)
-    else:
-        frame.to_json(dest, orient="records", lines=False, force_ascii=False)
 
 
 def split(
@@ -116,7 +97,7 @@ def split(
     ngram_max_count: int = 10,
     show_progress: bool = False,
 ) -> tuple[Any, Any]:
-    """Split *data* into train and eval sets with guaranteed zero contamination.
+    """Split *data* into train and eval sets, removing overlap detected by the selected methods.
 
     Parameters
     ----------
@@ -163,37 +144,51 @@ def split(
         ``list[str]`` for string lists, or :class:`pandas.DataFrame` for
         DataFrames and tabular file paths.
     """
+    methods_list = _validate_methods(methods)
+    payload = load_eval_payload(data, column=column, split=split, config=config)
+    train, evaluation, _ = _split_loaded(
+        payload,
+        eval_size=eval_size,
+        methods=methods_list,
+        threshold=threshold,
+        column=column,
+        seed=seed,
+        move_to=move_to,
+        output_train=output_train,
+        output_eval=output_eval,
+        model_name=model_name,
+        batch_size=batch_size,
+        num_perm=num_perm,
+        ngram_n=ngram_n,
+        ngram_max_count=ngram_max_count,
+        show_progress=show_progress,
+    )
+    return train, evaluation
+
+
+def _split_loaded(
+    payload: LoadedEval,
+    *,
+    eval_size: float | int,
+    methods: list[str],
+    threshold: float,
+    column: str,
+    seed: int | None,
+    move_to: str,
+    output_train: str | None,
+    output_eval: str | None,
+    model_name: str = "all-MiniLM-L6-v2",
+    batch_size: int = 64,
+    num_perm: int = 128,
+    ngram_n: int = 13,
+    ngram_max_count: int = 10,
+    show_progress: bool = False,
+) -> tuple[list[str] | pd.DataFrame, list[str] | pd.DataFrame, SplitResult]:
     if move_to not in {"train", "drop"}:
         raise ValueError(f"Unknown move_to option '{move_to}'. Valid options: 'train', 'drop'")
 
-    # Validate methods
-    if methods is None:
-        methods_list = list(_DEFAULT_METHODS)
-    else:
-        methods_list = list(methods)
-        for m in methods_list:
-            if m not in _VALID_METHODS:
-                raise ValueError(f"Unknown method '{m}'. Valid methods: {sorted(_VALID_METHODS)}")
-
-    payload = load_eval_payload(
-        data,
-        column=column,
-        split=split,
-        config=config,
-        default_split="train[:2000]",
-    )
-    n = len(payload.texts)
-
-    if n == 0:
-        empty_train = _slice_payload(payload, [])
-        empty_eval = _slice_payload(payload, [])
-        if output_train:
-            _write_split_export(empty_train, output_train, column=column)
-        if output_eval:
-            _write_split_export(empty_eval, output_eval, column=column)
-        return empty_train, empty_eval
-
     # Determine initial target eval count
+    n = len(payload.texts)
     if isinstance(eval_size, float):
         if not (0.0 <= eval_size <= 1.0):
             raise ValueError(f"eval_size as float must be between 0.0 and 1.0, got {eval_size}")
@@ -228,7 +223,7 @@ def split(
         report = check(
             current_train_texts,
             current_eval_texts,
-            methods=methods_list,
+            methods=methods,
             threshold=threshold,
             model_name=model_name,
             batch_size=batch_size,
@@ -248,18 +243,21 @@ def split(
 
         # Remove from candidate eval
         eval_indices = [idx for idx in eval_indices if idx not in flagged_set]
-        moved_count += len(flagged_original_indices)
-
         if move_to == "train":
             # Add to train so data is preserved without any eval leakage
             train_indices.extend(flagged_original_indices)
+            moved_count += len(flagged_original_indices)
 
     train_data = _slice_payload(payload, train_indices)
     eval_data = _slice_payload(payload, eval_indices)
 
-    if output_train:
-        _write_split_export(train_data, output_train, column=column)
-    if output_eval:
-        _write_split_export(eval_data, output_eval, column=column)
+    for output, data, indices in (
+        (output_train, train_data, train_indices),
+        (output_eval, eval_data, eval_indices),
+    ):
+        if output:
+            Path(output).parent.mkdir(parents=True, exist_ok=True)
+            write_dataset(data, output, column=column, texts=[all_texts[i] for i in indices])
 
-    return train_data, eval_data
+    summary = SplitResult(n, len(train_indices), len(eval_indices), moved_count, methods, threshold, seed)
+    return train_data, eval_data, summary
