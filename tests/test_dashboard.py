@@ -93,7 +93,7 @@ def test_dashboard_filters_and_literal_search(
     )
     view = _dashboard_app(tmp_path, monkeypatch, report)
     assert not view.exception
-    assert view.metric[3].value == "66.666667%"
+    assert view.metric[3].value == "66.7%"
     assert len(view.get("vega_lite_chart")) == 2
     assert len(_visible_pairs(view)) == 2
     view.text_input(key="query").set_value("[needle]").run()
