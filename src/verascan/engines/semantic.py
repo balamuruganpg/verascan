@@ -11,6 +11,8 @@ traceback.
 from __future__ import annotations
 
 import logging
+import math
+from typing import Any
 
 from tqdm import tqdm
 
@@ -84,6 +86,288 @@ def require() -> None:
 # Engine
 # ---------------------------------------------------------------------------
 
+# Passages overlap so a shared ending past the model window can still match.
+_PASSAGE_WINDOW = 32
+_PASSAGE_STRIDE = 16
+# Every window must clear this before a score of 1.0 means the same document.
+_SAME_WINDOW = 0.9995
+_IDENTITY_CAP = 0.9999
+_SIM_CHUNK = 4096
+
+
+def _validate_semantic_threshold(threshold: float) -> None:
+    """Reject thresholds cosine similarity cannot use, before importing extras."""
+    if (
+        isinstance(threshold, bool)
+        or not isinstance(threshold, (int, float))
+        or not math.isfinite(threshold)
+        or not 0.0 <= threshold <= 1.0
+    ):
+        raise ValueError("Semantic threshold must be between 0 and 1.")
+
+
+def _semantic_stored_score(score: float, threshold: float) -> float | None:
+    """Clamp a cosine into [-1, 1] and keep an admitted pair above *threshold*.
+
+    Four-decimal rounding can drop a pair the scan just accepted (0.85000098
+    becomes 0.8500). The stored score stays on the same side of *threshold*
+    and inside the range :func:`verascan.dashboard.load_report` accepts.
+    """
+    if not math.isfinite(score):
+        return None
+    clamped = max(-1.0, min(1.0, float(score)))
+    if clamped < threshold:
+        return None
+    stored = round(clamped, 4)
+    if stored < threshold:
+        stored = min(1.0, math.floor(threshold * 10000 + 1) / 10000)
+    return stored
+
+
+def _content_limit(model: Any) -> int | None:
+    """Tokens the model can embed, excluding special tokens. ``None`` skips windows."""
+    tokenizer = getattr(model, "tokenizer", None)
+    max_seq = getattr(model, "max_seq_length", None)
+    if tokenizer is None or max_seq is None:
+        return None
+    try:
+        limit = int(max_seq)
+    except (TypeError, ValueError):
+        return None
+    counter = getattr(tokenizer, "num_special_tokens_to_add", None)
+    special = 0
+    if counter is not None:
+        try:
+            special = int(counter(False))
+        except TypeError:
+            try:
+                special = int(counter())
+            except (TypeError, ValueError):
+                special = 0
+        except ValueError:
+            special = 0
+    limit -= special
+    if limit < 1:
+        return None
+    return limit
+
+
+def _token_ids(tokenizer: Any, text: str) -> list[Any] | None:
+    encode = getattr(tokenizer, "encode", None)
+    if encode is None:
+        return None
+    try:
+        # verbose=False avoids a false "indexing errors" warning on long text
+        # we only tokenize so it can be split into windows.
+        ids = encode(text, add_special_tokens=False, verbose=False)
+    except TypeError:
+        try:
+            ids = encode(text, add_special_tokens=False)
+        except TypeError:
+            ids = encode(text)
+    if isinstance(ids, dict):
+        ids = ids.get("input_ids", [])
+    try:
+        return list(ids)
+    except TypeError:
+        return None
+
+
+def _sliding(ids: list[Any], window: int, stride: int) -> list[list[Any]]:
+    if len(ids) <= window:
+        return [ids]
+    chunks: list[list[Any]] = []
+    start = 0
+    while start < len(ids):
+        chunks.append(ids[start : start + window])
+        if start + window >= len(ids):
+            break
+        start += stride
+    return chunks
+
+
+def _segments(model: Any, text: str) -> list[str]:
+    """Return the original string, or overlapping passages when it exceeds the window.
+
+    Short strings, including empty and whitespace-only text, stay intact so
+    their embedding matches a single ``encode`` call.
+    """
+    limit = _content_limit(model)
+    tokenizer = getattr(model, "tokenizer", None)
+    if limit is None or tokenizer is None:
+        return [text]
+    ids = _token_ids(tokenizer, text)
+    if ids is None or len(ids) <= limit:
+        return [text]
+    decode = getattr(tokenizer, "decode", None)
+    if decode is None:
+        return [text]
+    window = min(_PASSAGE_WINDOW, limit)
+    stride = min(_PASSAGE_STRIDE, window)
+    segments: list[str] = []
+    for chunk in _sliding(ids, window, stride):
+        piece = decode(chunk)
+        segments.append(piece if isinstance(piece, str) else str(piece))
+    return segments or [text]
+
+
+def _encode_matrix(model: Any, texts: list[str], batch_size: int, show_progress: bool) -> Any:
+    import numpy as np
+
+    matrix = model.encode(
+        texts,
+        batch_size=batch_size,
+        show_progress_bar=show_progress,
+        convert_to_numpy=True,
+        normalize_embeddings=True,
+    )
+    return np.ascontiguousarray(matrix, dtype=np.float32)
+
+
+def _pair_evidence(eval_mat: Any, train_mat: Any) -> tuple[float, bool]:
+    """Max cosine, and whether every window on both sides clears ``_SAME_WINDOW``."""
+    import numpy as np
+
+    evidence = -math.inf
+    eval_best = np.full(eval_mat.shape[0], -math.inf, dtype=np.float64)
+    windows_match = True
+    for start in range(0, train_mat.shape[0], _SIM_CHUNK):
+        sims = eval_mat @ train_mat[start : start + _SIM_CHUNK].T
+        evidence = max(evidence, float(np.max(sims)))
+        eval_best = np.maximum(eval_best, np.max(sims, axis=1))
+        if not bool(np.all(np.max(sims, axis=0) >= _SAME_WINDOW)):
+            windows_match = False
+    fully_same = windows_match and bool(np.all(eval_best >= _SAME_WINDOW))
+    return evidence, fully_same
+
+
+def _append_match(
+    matches: list[MatchRecord],
+    *,
+    eval_idx: int,
+    train_idx: int,
+    eval_texts: list[str],
+    train_texts: list[str],
+    raw_score: float,
+    threshold: float,
+) -> None:
+    stored = _semantic_stored_score(raw_score, threshold)
+    if stored is None:
+        return
+    matches.append(
+        MatchRecord(
+            eval_index=eval_idx,
+            train_index=train_idx,
+            eval_text=eval_texts[eval_idx],
+            train_text=train_texts[train_idx],
+            score=stored,
+            method="semantic",
+        )
+    )
+
+
+def _faiss_matches(
+    model: Any,
+    train_texts: list[str],
+    eval_texts: list[str],
+    *,
+    threshold: float,
+    batch_size: int,
+    show_progress: bool,
+) -> list[MatchRecord]:
+    """Every training row at or above *threshold*. The index order is not assumed."""
+    import faiss  # type: ignore[import-untyped]
+
+    logger.info("Encoding %d train texts ...", len(train_texts))
+    train_embs = _encode_matrix(model, train_texts, batch_size, show_progress)
+    logger.info("Encoding %d eval texts ...", len(eval_texts))
+    eval_embs = _encode_matrix(model, eval_texts, batch_size, show_progress)
+
+    index = faiss.IndexFlatIP(train_embs.shape[1])
+    index.add(train_embs)
+    # k covers the whole training set. A top-10 cap hid extra copies of one row.
+    scores_all, indices_all = index.search(eval_embs, len(train_texts))
+
+    matches: list[MatchRecord] = []
+    for eval_idx in tqdm(
+        range(len(eval_texts)),
+        desc="Semantic scan",
+        disable=not show_progress,
+        leave=False,
+    ):
+        seen: set[int] = set()
+        for rank in range(len(train_texts)):
+            train_idx = int(indices_all[eval_idx][rank])
+            if train_idx < 0 or train_idx in seen:
+                continue
+            seen.add(train_idx)
+            _append_match(
+                matches,
+                eval_idx=eval_idx,
+                train_idx=train_idx,
+                eval_texts=eval_texts,
+                train_texts=train_texts,
+                raw_score=float(scores_all[eval_idx][rank]),
+                threshold=threshold,
+            )
+    return matches
+
+
+def _passage_matches(
+    model: Any,
+    train_texts: list[str],
+    eval_texts: list[str],
+    train_segments: list[list[str]],
+    eval_segments: list[list[str]],
+    *,
+    threshold: float,
+    batch_size: int,
+    show_progress: bool,
+) -> list[MatchRecord]:
+    """Score each document by its best passage, and cap identity when windows disagree."""
+    train_spans: list[tuple[int, int]] = []
+    flat_train: list[str] = []
+    for segments in train_segments:
+        train_spans.append((len(flat_train), len(flat_train) + len(segments)))
+        flat_train.extend(segments)
+    eval_spans: list[tuple[int, int]] = []
+    flat_eval: list[str] = []
+    for segments in eval_segments:
+        eval_spans.append((len(flat_eval), len(flat_eval) + len(segments)))
+        flat_eval.extend(segments)
+
+    logger.info("Encoding %d train passages ...", len(flat_train))
+    train_emb = _encode_matrix(model, flat_train, batch_size, show_progress)
+    logger.info("Encoding %d eval passages ...", len(flat_eval))
+    eval_emb = _encode_matrix(model, flat_eval, batch_size, show_progress)
+
+    matches: list[MatchRecord] = []
+    for eval_idx in tqdm(
+        range(len(eval_texts)),
+        desc="Semantic scan",
+        disable=not show_progress,
+        leave=False,
+    ):
+        eval_start, eval_end = eval_spans[eval_idx]
+        eval_mat = eval_emb[eval_start:eval_end]
+        ranked: list[tuple[float, int]] = []
+        for train_idx, (train_start, train_end) in enumerate(train_spans):
+            evidence, fully_same = _pair_evidence(eval_mat, train_emb[train_start:train_end])
+            raw = evidence if fully_same else min(evidence, _IDENTITY_CAP)
+            if raw >= threshold:
+                ranked.append((raw, train_idx))
+        for raw, train_idx in sorted(ranked, key=lambda item: (-item[0], item[1])):
+            _append_match(
+                matches,
+                eval_idx=eval_idx,
+                train_idx=train_idx,
+                eval_texts=eval_texts,
+                train_texts=train_texts,
+                raw_score=raw,
+                threshold=threshold,
+            )
+    return matches
+
 
 def find_semantic_matches(
     train_texts: list[str],
@@ -94,14 +378,19 @@ def find_semantic_matches(
     batch_size: int = 64,
     show_progress: bool = True,
 ) -> list[MatchRecord]:
-    """Return semantically similar pairs above *threshold* cosine similarity.
+    """Return every pair whose passage cosine is at least *threshold*.
+
+    Texts that fit in the model window are embedded as a single string, so
+    short, empty, and whitespace inputs keep their original scores. Longer
+    texts are split into overlapping passages. A score of 1.0 means those
+    passages agree; a shared prefix alone cannot report document identity.
 
     Parameters
     ----------
     train_texts, eval_texts:
         Lists of raw text strings.
     threshold:
-        Minimum cosine similarity to report (0 -- 1).
+        Minimum cosine similarity to report. Must be between 0 and 1.
     model_name:
         Any model supported by ``sentence-transformers``.
     batch_size:
@@ -111,74 +400,50 @@ def find_semantic_matches(
 
     Raises
     ------
+    ValueError
+        If *threshold* is not a finite number in ``[0, 1]``.
     ImportError
         If the semantic extras are not installed or broken.
     """
+    _validate_semantic_threshold(threshold)
     require()
-
-    import faiss  # type: ignore[import-untyped]
-    import numpy as np
-    from sentence_transformers import SentenceTransformer  # type: ignore[import-untyped]
 
     if not train_texts or not eval_texts:
         return []
 
+    from sentence_transformers import SentenceTransformer  # type: ignore[import-untyped]
+
     logger.info("Loading model '%s' ...", model_name)
     model = SentenceTransformer(model_name)
-
-    # Encode training set.
-    logger.info("Encoding %d train texts ...", len(train_texts))
-    train_embs = model.encode(
-        train_texts,
-        batch_size=batch_size,
-        show_progress_bar=show_progress,
-        convert_to_numpy=True,
-        normalize_embeddings=True,
+    train_segments = [_segments(model, text) for text in train_texts]
+    eval_segments = [_segments(model, text) for text in eval_texts]
+    windowed = any(
+        len(segments) != 1 or segments[0] != text
+        for segments, text in zip(train_segments, train_texts)
+    ) or any(
+        len(segments) != 1 or segments[0] != text
+        for segments, text in zip(eval_segments, eval_texts)
     )
-
-    # Encode eval set.
-    logger.info("Encoding %d eval texts ...", len(eval_texts))
-    eval_embs = model.encode(
-        eval_texts,
-        batch_size=batch_size,
-        show_progress_bar=show_progress,
-        convert_to_numpy=True,
-        normalize_embeddings=True,
-    )
-
-    # Build FAISS index (inner product on L2-normalised vectors = cosine sim).
-    dim = train_embs.shape[1]
-    index = faiss.IndexFlatIP(dim)
-    index.add(train_embs.astype(np.float32))
-
-    # Search — retrieve top-k candidates per eval example.
-    k = min(10, len(train_texts))
-    scores_all, indices_all = index.search(eval_embs.astype(np.float32), k)
-
-    matches: list[MatchRecord] = []
-    for eval_idx in tqdm(
-        range(len(eval_texts)),
-        desc="Semantic scan",
-        disable=not show_progress,
-        leave=False,
-    ):
-        for rank in range(k):
-            train_idx = int(indices_all[eval_idx][rank])
-            score = float(scores_all[eval_idx][rank])
-            if train_idx < 0:
-                continue
-            if score < threshold:
-                break  # scores are sorted descending
-            matches.append(
-                MatchRecord(
-                    eval_index=eval_idx,
-                    train_index=train_idx,
-                    eval_text=eval_texts[eval_idx],
-                    train_text=train_texts[train_idx],
-                    score=round(score, 4),
-                    method="semantic",
-                )
-            )
+    if windowed:
+        matches = _passage_matches(
+            model,
+            train_texts,
+            eval_texts,
+            train_segments,
+            eval_segments,
+            threshold=threshold,
+            batch_size=batch_size,
+            show_progress=show_progress,
+        )
+    else:
+        matches = _faiss_matches(
+            model,
+            train_texts,
+            eval_texts,
+            threshold=threshold,
+            batch_size=batch_size,
+            show_progress=show_progress,
+        )
 
     logger.info("Semantic scan complete: %d matches above %.2f", len(matches), threshold)
     return matches

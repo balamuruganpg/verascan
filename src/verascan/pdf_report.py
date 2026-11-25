@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import difflib
 import html
 import re
 from datetime import datetime, timezone
@@ -27,29 +26,57 @@ if TYPE_CHECKING:
     from verascan.report import ContaminationReport
 
 
+def _glyph_map() -> dict[int, int]:
+    if "Verascan" not in pdfmetrics.getRegisteredFontNames():
+        fonts = Path(__file__).parent / "fonts"
+        pdfmetrics.registerFont(TTFont("Verascan", str(fonts / "DejaVuSans.ttf")))
+    return pdfmetrics.getFont("Verascan").face.charToGlyph
+
+
+def _show_text(text: str) -> str:
+    """Keep characters the PDF font can draw, and name the ones it cannot.
+
+    ReportLab emits a non-BMP code point as an odd-length hex string, which
+    readers drop. A cmap hit is not enough for those characters.
+    """
+    glyphs = _glyph_map()
+    parts: list[str] = []
+    for char in text:
+        code = ord(char)
+        drawable = char == "\n" or (
+            code <= 0xFFFF and code in glyphs and glyphs[code] != 0
+        )
+        parts.append(char if drawable else f"[U+{code:04X} omitted]")
+    return "".join(parts)
+
+
 def _safe(text: str) -> str:
-    return html.escape(re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f]", "", text)).replace("\n", "<br/>")
+    visible = _show_text(re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f]", "", text))
+    return html.escape(visible).replace("\n", "<br/>")
 
 
 def _diff(train: str, eval_text: str) -> str:
-    a, b = train.split(), eval_text.split()
+    from verascan.report import _word_diff_opcodes
+
+    train_words, eval_words, opcodes = _word_diff_opcodes(train, eval_text)
     parts: list[str] = []
-    for tag, i, j, k, end in difflib.SequenceMatcher(None, a, b, autojunk=False).get_opcodes():
+    for tag, i, j, k, end in opcodes:
         if tag == "equal":
-            parts.append(_safe(" ".join(a[i:j])))
+            parts.append(_safe(" ".join(train_words[i:j])))
         if tag in {"delete", "replace"}:
             parts.append(
-                f'<font color="#9f1239" backColor="#ffe4e6"><strike>{_safe(" ".join(a[i:j]))}</strike></font>'
+                f'<font color="#9f1239" backColor="#ffe4e6"><strike>{_safe(" ".join(train_words[i:j]))}</strike></font>'
             )
         if tag in {"insert", "replace"}:
             parts.append(
-                f'<font color="#166534" backColor="#dcfce7">{_safe(" ".join(b[k:end]))}</font>'
+                f'<font color="#166534" backColor="#dcfce7">{_safe(" ".join(eval_words[k:end]))}</font>'
             )
     return " ".join(parts) or "(empty text)"
 
 
 def write_pdf(report: ContaminationReport, path: str) -> None:
     """Write a summary cover, match table and full word-level differences."""
+    from verascan.report import format_match_score
     # Bundled DejaVu fonts cover Latin, Greek and Cyrillic without system fonts.
     fonts = Path(__file__).parent / "fonts"
     for name, filename in (
@@ -283,7 +310,7 @@ def write_pdf(report: ContaminationReport, path: str) -> None:
                         match["train_index"],
                         match["method"],
                         match.get("benchmark", "-"),
-                        f"{match['score']:.4f}",
+                        format_match_score(match["score"]),
                     )
                 ]
             )
@@ -320,7 +347,8 @@ def write_pdf(report: ContaminationReport, path: str) -> None:
         for i, match in enumerate(data["matches"], 1):
             label = (
                 f"Pair {i} | Eval {match['eval_index']} / Train {match['train_index']} | "
-                f"{match['method']} | {match.get('benchmark', 'custom')} | {match['score']:.4f}"
+                f"{match['method']} | {match.get('benchmark', 'custom')} | "
+                f"{format_match_score(match['score'])}"
             )
             story.append(Paragraph(_safe(label), styles["Heading3"]))
             story.append(Paragraph(_diff(match["train_text"], match["eval_text"]), styles["Diff"]))

@@ -31,6 +31,7 @@ def check(
     methods: Sequence[str] | None = None,
     threshold: float = 0.85,
     column: str = "text",
+    eval_column: str | None = None,
     train_split: str | None = None,
     eval_split: str | None = None,
     config: str | None = None,
@@ -59,6 +60,9 @@ def check(
         Similarity threshold for fuzzy and semantic methods (0 – 1).
     column:
         Column name to extract text from (when inputs are DataFrames/CSVs/JSONL/Datasets).
+    eval_column:
+        Evaluation text column when it differs from *column*. Audit uses this so
+        the training column does not replace other benchmark fields.
     train_split:
         Split to load when *train* is a Hugging Face dataset name (default: ``"train[:2000]"``).
     eval_split:
@@ -96,6 +100,7 @@ def check(
     effective_train_config = train_config if train_config is not None else config
     effective_eval_config = eval_config if eval_config is not None else config
 
+    text_column = column if eval_column is None else eval_column
     train_texts = load_texts(
         train,
         column=column,
@@ -105,7 +110,7 @@ def check(
     )
     eval_payload = load_eval_payload(
         eval,
-        column=column,
+        column=text_column,
         split=eval_split,
         config=effective_eval_config,
         default_split="test",
@@ -211,5 +216,5 @@ def check(
         eval_texts=eval_texts,
         eval_records=eval_payload.records,
         eval_columns=eval_payload.columns,
-        eval_column=column,
+        eval_column=text_column,
     )

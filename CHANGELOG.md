@@ -9,6 +9,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.2] - 2026-11-25
+
+### Fixed
+
+- CSV loading keeps NUL characters and a leading UTF-8 BOM, matching JSON and
+  JSONL, so a dataset written by Verascan reloads as the same text.
+- Benchmark audits no longer overwrite fields named `answer` or `subject`.
+  In-memory benchmark counts use the same labels as the JSON report.
+- HTML and PDF reports share one word alignment, so a repeated word is not
+  deleted from the HTML diff.
+- Semantic scores compare overlapping passages past the embedding window, and
+  a score of 1.0 means those passages agree. Thresholds outside 0–1 are
+  rejected. CPU search lists every training row at or above the threshold, and
+  stored scores stay inside -1–1.
+- A real n-gram hit no longer displays as zero. HTML and PDF print the stored
+  score to four decimals, and the HTML banner shows flagged examples beside
+  the pair count.
+- `--fail-above` rejects non-finite values. The failure line uses the same
+  percentage as the summary.
+- Report paths must end in `.pdf`, `.json`, or `.html`. Outputs that resolve
+  to the same file are rejected before anything is written.
+- Fuzzy matching keeps every pair whose MinHash estimate meets the threshold.
+- An n-gram-only split reports verbatim overlap when retained rows are
+  identical and shorter than the gram.
+- PDF reports name characters the bundled font cannot draw, including emoji
+  that were part of a matched string.
+
 ## [0.6.1] - 2026-11-18
 
 ### Fixed

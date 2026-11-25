@@ -267,7 +267,7 @@ verascan check --train train.jsonl --eval eval.jsonl --fail-above 0.01
 | --- | --- | --- |
 | `exact` | Normalized verbatim duplicates. | Core installation. |
 | `ngram` | Shared word passages; 13-word grams by default. | Core installation. |
-| `fuzzy` | Near-duplicates using MinHash and locality-sensitive hashing. | Core installation. |
+| `fuzzy` | Near-duplicates using MinHash Jaccard estimates. | Core installation. |
 | `semantic` | Similar meaning using normalized sentence embeddings and FAISS search. | `semantic` extra. |
 
 For offline benchmark examples, `verascan audit --synthetic` uses small synthetic

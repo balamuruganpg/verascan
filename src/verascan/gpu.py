@@ -274,11 +274,9 @@ def gpu_audit(
     records: list[dict[str, Any]] = []
     for name in normalized:
         rows = load_benchmark(name, split=bm_split, synthetic=synthetic)[:max_eval]
-        for row in rows:
-            record = dict(row)
-            record[column] = record["text"]
-            records.append(record)
-    eval_texts = load_eval_payload(records, column=column).texts
+        # Copy rows so the train column cannot replace benchmark answer/subject.
+        records.extend(dict(row) for row in rows)
+    eval_texts = load_eval_payload(records, column="text").texts
     matches = (
         _gpu_matches(
             train_texts,
@@ -303,5 +301,5 @@ def gpu_audit(
         eval_texts=eval_texts,
         eval_records=records,
         eval_columns=list(dict.fromkeys(key for row in records for key in row)),
-        eval_column=column,
+        eval_column="text",
     )

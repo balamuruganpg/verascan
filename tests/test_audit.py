@@ -54,7 +54,7 @@ def test_audit_synthetic_stand_in_direct():
     )
     assert report.total_matches == 0
     assert report.contamination_rate == 0.0
-    assert report.benchmark_counts == {"gsm8k": 0, "humaneval": 0}
+    assert report.benchmark_counts == {"gsm8k (synthetic)": 0, "humaneval (synthetic)": 0}
 
 
 def test_audit_hf_download_unavailable_with_allow_synthetic(caplog):
@@ -122,7 +122,7 @@ def test_audit_finds_exact_planted_leak_gsm8k():
     assert report.exact_count == 1
     assert report.total_matches == 1
     assert report.contamination_rate > 0.0
-    assert report.benchmark_counts["gsm8k"] == 1
+    assert report.benchmark_counts["gsm8k (synthetic)"] == 1
 
     match = report.matches[0]
     assert match.method == "exact"
@@ -149,14 +149,14 @@ def test_audit_finds_planted_leaks_humaneval_and_mmlu():
     )
 
     assert report.total_matches == 2
-    assert report.benchmark_counts["humaneval"] == 1
-    assert report.benchmark_counts["mmlu"] == 1
+    assert report.benchmark_counts["humaneval (synthetic)"] == 1
+    assert report.benchmark_counts["mmlu (synthetic)"] == 1
 
     by_bm = report.by_benchmark()
-    assert len(by_bm["humaneval"]) == 1
-    assert len(by_bm["mmlu"]) == 1
-    assert by_bm["humaneval"][0].train_text == planted_code
-    assert by_bm["mmlu"][0].train_text == planted_mmlu
+    assert len(by_bm["humaneval (synthetic)"]) == 1
+    assert len(by_bm["mmlu (synthetic)"]) == 1
+    assert by_bm["humaneval (synthetic)"][0].train_text == planted_code
+    assert by_bm["mmlu (synthetic)"][0].train_text == planted_mmlu
 
 
 def test_audit_fuzzy_and_ngram_planted_leak():
@@ -173,7 +173,7 @@ def test_audit_fuzzy_and_ngram_planted_leak():
     )
 
     assert report.fuzzy_count >= 1
-    assert report.benchmark_counts["gsm8k"] >= 1
+    assert report.benchmark_counts["gsm8k (synthetic)"] >= 1
 
 
 def test_audit_custom_train_column():
@@ -250,7 +250,7 @@ def test_audit_ngram_planted_leak():
     )
 
     assert report.ngram_count >= 1
-    assert report.benchmark_counts["gsm8k"] >= 1
+    assert report.benchmark_counts["gsm8k (synthetic)"] >= 1
 
 
 def test_audit_semantic_planted_leak():
@@ -275,7 +275,7 @@ def test_audit_semantic_planted_leak():
     )
 
     assert report.semantic_count >= 1
-    assert report.benchmark_counts["mmlu"] >= 1
+    assert report.benchmark_counts["mmlu (synthetic)"] >= 1
 
 
 def test_audit_train_file_path(tmp_path: Path):
@@ -293,7 +293,7 @@ def test_audit_train_file_path(tmp_path: Path):
     )
 
     assert report.total_matches == 1
-    assert report.benchmark_counts["humaneval"] == 1
+    assert report.benchmark_counts["humaneval (synthetic)"] == 1
 
 
 def test_audit_cleaned_eval():

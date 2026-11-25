@@ -27,6 +27,21 @@ def _clean_text(text: str) -> str:
     return " ".join(word.strip(string.punctuation) for word in text.lower().split())
 
 
+def _stored_overlap(overlap: int, total: int) -> float:
+    """Return an overlap ratio that stays visible when the hit is real.
+
+    Rounding to four decimals turns one shared gram in a long example into
+    ``0.0`` while the row is still flagged. A positive overlap stays at least
+    ``0.0001``, which is the smallest four-decimal score HTML and PDF show.
+    """
+    if total <= 0 or overlap <= 0:
+        return 0.0
+    stored = round(overlap / total, 4)
+    if stored <= 0.0:
+        return 0.0001
+    return stored
+
+
 def _word_ngrams(text: str, n: int) -> list[str]:
     """Return ordered word *n*-grams from cleaned *text* (may be empty)."""
     words = _clean_text(text).split()
@@ -117,14 +132,14 @@ def find_ngram_matches(
             eval_unique = set(eval_grams)
             train_retained = train_ngram_sets[train_idx] & retained
             overlap = len(eval_unique & train_retained)
-            score = overlap / len(eval_unique) if eval_unique else 0.0
+            score = _stored_overlap(overlap, len(eval_unique))
             matches.append(
                 MatchRecord(
                     eval_index=eval_idx,
                     train_index=train_idx,
                     eval_text=eval_text,
                     train_text=train_texts[train_idx],
-                    score=round(score, 4),
+                    score=score,
                     method="ngram",
                 )
             )

@@ -38,17 +38,36 @@ class MatchRecord:
     diff: str | None = None  # word-level diff HTML (populated by report)
 
 
+def _word_diff_opcodes(
+    train: str, eval_text: str
+) -> tuple[list[str], list[str], list[tuple[str, int, int, int, int]]]:
+    """Word alignment shared by the HTML report and the PDF report.
+
+    ``autojunk`` is off. The default treats a token that is more than 1% of a
+    long sequence as junk and can delete a run of words the other report keeps.
+    """
+    train_words = train.split()
+    eval_words = eval_text.split()
+    opcodes = difflib.SequenceMatcher(None, train_words, eval_words, autojunk=False).get_opcodes()
+    return train_words, eval_words, opcodes
+
+
+def format_match_score(score: float) -> str:
+    """Format a stored match score so HTML and PDF show the same digits."""
+    return f"{score:.4f}"
+
+
 def _word_diff_html(a: str, b: str) -> str:
     """Return an HTML fragment highlighting word-level differences.
 
     Escapes all input strings safely to prevent raw HTML/script injection
     when datasets contain code, XML, or special characters.
     """
-    a_words = [html.escape(w) for w in a.split()]
-    b_words = [html.escape(w) for w in b.split()]
-    sm = difflib.SequenceMatcher(None, a_words, b_words)
+    a_words, b_words, opcodes = _word_diff_opcodes(a, b)
+    a_words = [html.escape(word) for word in a_words]
+    b_words = [html.escape(word) for word in b_words]
     parts: list[str] = []
-    for tag, i1, i2, j1, j2 in sm.get_opcodes():
+    for tag, i1, i2, j1, j2 in opcodes:
         if tag == "equal":
             parts.append(" ".join(a_words[i1:i2]))
         elif tag == "replace":
@@ -236,7 +255,7 @@ class ContaminationReport:
     def to_json(self, path: str) -> None:
         """Write the report to a JSON file."""
         Path(path).write_text(
-            json.dumps(self.to_dict(), indent=2, ensure_ascii=False),
+            json.dumps(self.to_dict(), indent=2, ensure_ascii=False, allow_nan=False),
             encoding="utf-8",
         )
 
@@ -262,6 +281,7 @@ class ContaminationReport:
                 {
                     **asdict(m),
                     "benchmark": benchmark,
+                    "score_label": format_match_score(m.score),
                     "diff_html": Markup(_word_diff_html(m.train_text, m.eval_text)),
                 }
             )
@@ -272,6 +292,7 @@ class ContaminationReport:
             matches=enriched,
             status=self.contamination_status,
             criteria=self.matching_criteria,
+            flagged_examples=len(self.contaminated_indices()),
             contamination_pct=format_contamination_rate(report["contamination_rate"]),
             contamination_pct_raw=report["contamination_rate"] * 100,
             timestamp=timestamp,

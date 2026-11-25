@@ -47,13 +47,28 @@ def _get_hf_dataset_type() -> type | None:
 
 
 def _load_csv(path: str, column: str) -> pd.DataFrame:
-    df = pd.read_csv(path, dtype=str, keep_default_na=False)
-    if column not in df.columns:
-        raise KeyError(
-            f"Column '{column}' not found in CSV file '{path}'. "
-            f"Available columns: {list(df.columns)}"
-        )
-    return df
+    """Read CSV cells as literal text, including NUL and a leading UTF-8 BOM.
+
+    pandas' C parser stops a field at the first ``\\x00``. The stdlib reader
+    keeps the same characters JSONL preserves, so a written CSV reloads unchanged.
+    """
+    with open(path, encoding="utf-8-sig", newline="") as fh:
+        reader = csv.DictReader(fh)
+        fieldnames = list(reader.fieldnames or [])
+        if column not in fieldnames:
+            raise KeyError(
+                f"Column '{column}' not found in CSV file '{path}'. "
+                f"Available columns: {fieldnames}"
+            )
+        rows: list[dict[str, str]] = []
+        for row in reader:
+            # A blank line has no fields. An intentional empty cell is "".
+            if all(value is None for value in row.values()):
+                continue
+            rows.append(
+                {name: "" if row.get(name) is None else row[name] for name in fieldnames}
+            )
+    return pd.DataFrame(rows, columns=fieldnames)
 
 
 def _text_value(value: Any, column: str, location: str) -> str:
@@ -92,22 +107,25 @@ def _jsonl_rows(fh: TextIO, path: str) -> Iterator[tuple[Any, str]]:
 
 
 def _load_json_payload(path: str, column: str, *, lines: bool) -> LoadedEval:
-    with open(path, encoding="utf-8") as fh:
+    # utf-8-sig accepts the same leading BOM pd.read_csv already accepted.
+    with open(path, encoding="utf-8-sig") as fh:
         if lines:
             return _records_payload(_jsonl_rows(fh, path), column)
         try:
             document = json.load(fh)
         except json.JSONDecodeError as exc:
-            # Older releases treated .json files as JSON Lines.
-            if exc.msg == "Extra data" or not exc.doc.strip():
-                fh.seek(0)
-                return _records_payload(_jsonl_rows(fh, path), column)
-            raise ValueError(f"Invalid JSON in '{path}': {exc}") from exc
-        rows = document if isinstance(document, list) else [document]
-        return _records_payload(
-            ((row, f"at row {index} of '{path}'") for index, row in enumerate(rows, 1)),
-            column,
-        )
+            # Older releases treated .json files as JSON Lines. Re-open so a
+            # leading BOM is stripped again; seeking the same decoder can keep it.
+            if exc.msg != "Extra data" and exc.doc.strip():
+                raise ValueError(f"Invalid JSON in '{path}': {exc}") from exc
+        else:
+            rows = document if isinstance(document, list) else [document]
+            return _records_payload(
+                ((row, f"at row {index} of '{path}'") for index, row in enumerate(rows, 1)),
+                column,
+            )
+    with open(path, encoding="utf-8-sig") as fh:
+        return _records_payload(_jsonl_rows(fh, path), column)
 
 
 def _load_dataframe(df: pd.DataFrame, column: str) -> list[str]:
@@ -179,9 +197,11 @@ def load_eval_payload(
 
     Returns a :class:`LoadedEval`. ``records`` / ``columns`` are ``None`` when
     *source* is a ``list[str]`` so callers can round-trip list vs table types.
-    CSV cells are read as literal strings. Other tabular inputs reject missing
-    text values (including null and NaN) with ``ValueError``. Non-missing
-    values are converted to strings, and literal empty strings are valid text.
+    CSV cells are read as literal strings, including embedded NUL characters.
+    A leading UTF-8 BOM is accepted on CSV, JSON, and JSONL. Other tabular
+    inputs reject missing text values (including null and NaN) with
+    ``ValueError``. Non-missing values are converted to strings, and literal
+    empty strings are valid text.
     """
     # --- list[str] / list[dict] -------------------------------------------
     if isinstance(source, list):
@@ -279,7 +299,8 @@ def load_texts(
 ) -> list[str]:
     """Load *source* and return a flat list of text strings.
 
-    CSV cells retain their original text, including empty cells. Missing text
+    CSV cells retain their original text, including empty cells and NUL
+    characters. A leading UTF-8 BOM is ignored on CSV and JSONL. Missing text
     values in other tabular sources raise ``ValueError``; literal strings such
     as ``"None"``, ``"nan"`` and ``""`` remain valid.
 

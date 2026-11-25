@@ -266,7 +266,7 @@ def test_audit_with_dataset_name(monkeypatch: pytest.MonkeyPatch) -> None:
         synthetic=True,
         methods=["exact"],
     )
-    assert report.benchmark_counts["gsm8k"] >= 1
+    assert report.benchmark_counts["gsm8k (synthetic)"] >= 1
 
 
 def test_unsupported_extension(tmp_path: Path) -> None:

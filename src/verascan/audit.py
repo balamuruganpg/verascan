@@ -35,28 +35,38 @@ class AuditReport(ContaminationReport):
             for name in self.benchmarks
         }
 
+    def _label(self, name: str) -> str:
+        return self._benchmark_labels().get(name, name)
+
     @property
     def benchmark_counts(self) -> dict[str, int]:
-        """Count of contaminated evaluation examples per benchmark."""
-        counts = {b: 0 for b in self.benchmarks}
+        """Count of contaminated evaluation examples per benchmark label.
+
+        Keys match :meth:`by_benchmark`, :meth:`summary`, and :meth:`to_dict`
+        (synthetic stand-ins use ``"gsm8k (synthetic)"``).
+        """
+        labels = self._benchmark_labels()
+        counts = {labels[name]: 0 for name in self.benchmarks}
         if self.eval_records is None:
             return counts
-        flagged_indices = self.contaminated_indices()
-        for idx in flagged_indices:
+        for idx in self.contaminated_indices():
             if idx < len(self.eval_records):
-                bm = self.eval_records[idx].get("benchmark", "unknown")
-                counts[bm] = counts.get(bm, 0) + 1
+                label = self._label(str(self.eval_records[idx].get("benchmark", "unknown")))
+                counts[label] = counts.get(label, 0) + 1
         return counts
 
     def by_benchmark(self) -> dict[str, list[MatchRecord]]:
-        """Return matches grouped by benchmark name."""
-        grouped: dict[str, list[MatchRecord]] = {b: [] for b in self.benchmarks}
+        """Return matches grouped by the same benchmark label as the JSON report."""
+        labels = self._benchmark_labels()
+        grouped: dict[str, list[MatchRecord]] = {labels[name]: [] for name in self.benchmarks}
         if self.eval_records is None:
             return grouped
         for match in self.matches:
             if match.eval_index < len(self.eval_records):
-                bm = self.eval_records[match.eval_index].get("benchmark", "unknown")
-                grouped.setdefault(bm, []).append(match)
+                label = self._label(
+                    str(self.eval_records[match.eval_index].get("benchmark", "unknown"))
+                )
+                grouped.setdefault(label, []).append(match)
         return grouped
 
     def summary(self) -> str:
@@ -92,8 +102,9 @@ class AuditReport(ContaminationReport):
             lines.append("  Benchmark Contamination:")
             bm_counts = self.benchmark_counts
             for bm in self.benchmarks:
-                c = bm_counts.get(bm, 0)
-                lines.append(f"    - {labels[bm]:<12}: {c} contaminated")
+                label = labels[bm]
+                c = bm_counts.get(label, 0)
+                lines.append(f"    - {label:<12}: {c} contaminated")
 
         lines.append("=" * 47)
         lines.append("")
@@ -105,9 +116,9 @@ class AuditReport(ContaminationReport):
         data = super().to_dict()
         labels = self._benchmark_labels()
         data["synthetic"] = any(name != label for name, label in labels.items())
-        data["benchmarks"] = list(labels.values())
+        data["benchmarks"] = [labels[name] for name in self.benchmarks]
         data["benchmark_counts"] = {
-            labels.get(name, name): count for name, count in self.benchmark_counts.items()
+            labels[name]: self.benchmark_counts.get(labels[name], 0) for name in self.benchmarks
         }
         if self.eval_records is not None:
             for match_dict in data.get("matches", []):
@@ -218,15 +229,14 @@ def audit(
         all_records.extend(records)
 
     eval_df = pd.DataFrame(all_records) if all_records else pd.DataFrame(columns=["text"])
-    if column != "text" and "text" in eval_df.columns:
-        eval_df[column] = eval_df["text"]
-
+    # *column* selects training text only. Benchmark answer/subject fields stay intact.
     base_report = check(
         train=train,
         eval=eval_df,
         methods=methods,
         threshold=threshold,
         column=column,
+        eval_column="text",
         train_split=eff_train_split,
         config=eff_train_config,
         model_name=model_name,
@@ -246,6 +256,6 @@ def audit(
         eval_texts=base_report.eval_texts,
         eval_records=base_report.eval_records,
         eval_columns=base_report.eval_columns,
-        eval_column=column,
+        eval_column="text",
         benchmarks=normalized_bms,
     )

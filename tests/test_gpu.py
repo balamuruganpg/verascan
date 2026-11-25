@@ -78,7 +78,7 @@ def test_gpu_audit_cuda_and_correct_matches(gpu_deps: SimpleNamespace) -> None:
     assert report.methods_used == ["semantic"]
     assert report.train_size == 2 and report.eval_size == 1
     assert [(m.train_index, m.eval_index, m.score) for m in report.matches] == [(1, 0, 1.0)]
-    assert report.benchmark_counts == {"gsm8k": 1}
+    assert report.benchmark_counts == {"gsm8k (synthetic)": 1}
     assert gpu_deps.devices == ["cuda:1"]
     assert gpu_deps.gpu_devices == [1]
     assert all(len(batch) <= 1 for batch in gpu_deps.batches)

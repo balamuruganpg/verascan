@@ -16,7 +16,11 @@ import pandas as pd
 
 from verascan.core import _validate_methods, check
 from verascan.loaders import DataInput, LoadedEval, load_eval_payload, write_dataset
-from verascan.report import matching_criteria
+from verascan.report import (
+    calculate_contamination_rate,
+    format_contamination_rate,
+    matching_criteria,
+)
 
 
 @dataclass(frozen=True)
@@ -30,6 +34,7 @@ class SplitResult:
     methods_used: list[str]
     threshold: float
     seed: int | None
+    residual_leakage: str | None = None
 
     @property
     def eval_ratio(self) -> float:
@@ -41,6 +46,11 @@ class SplitResult:
         """Return a summary with sizes relative to the input dataset."""
         dropped = self.total_samples - self.train_size - self.eval_size
         methods = ", ".join(self.methods_used)
+        residual = (
+            self.residual_leakage
+            if self.residual_leakage is not None
+            else f"0.0% with {methods} on retained rows"
+        )
         lines = [
             "",
             "=" * 47,
@@ -59,7 +69,7 @@ class SplitResult:
             f"  Eval split      : {self.eval_size:,} samples ({self.eval_ratio:.1%} of input)",
             f"  Dropped rows    : {dropped:,}",
             f"  Purified leakage: {self.moved_count:,} candidate eval samples moved to train",
-            f"  Residual leakage: 0.0% with {methods} on retained rows",
+            f"  Residual leakage: {residual}",
             "=" * 47,
             "",
         ]
@@ -184,6 +194,12 @@ def _split_loaded(
     ngram_max_count: int = 10,
     show_progress: bool = False,
 ) -> tuple[list[str] | pd.DataFrame, list[str] | pd.DataFrame, SplitResult]:
+    if (
+        output_train
+        and output_eval
+        and Path(output_train).resolve() == Path(output_eval).resolve()
+    ):
+        raise ValueError("--output-train and --output-eval must use different paths.")
     if move_to not in {"train", "drop"}:
         raise ValueError(f"Unknown move_to option '{move_to}'. Valid options: 'train', 'drop'")
 
@@ -248,6 +264,9 @@ def _split_loaded(
             train_indices.extend(flagged_original_indices)
             moved_count += len(flagged_original_indices)
 
+    residual_leakage = _ngram_blind_residual(
+        all_texts, train_indices, eval_indices, methods, ngram_n
+    )
     train_data = _slice_payload(payload, train_indices)
     eval_data = _slice_payload(payload, eval_indices)
 
@@ -259,5 +278,52 @@ def _split_loaded(
             Path(output).parent.mkdir(parents=True, exist_ok=True)
             write_dataset(data, output, column=column, texts=[all_texts[i] for i in indices])
 
-    summary = SplitResult(n, len(train_indices), len(eval_indices), moved_count, methods, threshold, seed)
+    summary = SplitResult(
+        n,
+        len(train_indices),
+        len(eval_indices),
+        moved_count,
+        methods,
+        threshold,
+        seed,
+        residual_leakage=residual_leakage,
+    )
     return train_data, eval_data, summary
+
+
+def _ngram_blind_residual(
+    texts: list[str],
+    train_indices: list[int],
+    eval_indices: list[int],
+    methods: list[str],
+    ngram_n: int,
+) -> str | None:
+    """Describe verbatim copies an n-gram-only split cannot see.
+
+    N-gram overlap needs ``ngram_n`` words. Identical shorter rows stay in
+    both splits, so a residual of 0% would be false. Other methods can see
+    those copies, and rows long enough to form n-grams keep the 0% line.
+    """
+    if set(methods) != {"ngram"} or not train_indices or not eval_indices:
+        return None
+    from verascan.engines.exact import find_exact_matches
+    from verascan.engines.ngram import _word_ngrams
+
+    train_texts = [texts[index] for index in train_indices]
+    eval_texts = [texts[index] for index in eval_indices]
+    exact = find_exact_matches(train_texts, eval_texts, show_progress=False)
+    if not exact:
+        return None
+    blind = any(
+        not _word_ngrams(match.train_text, ngram_n) or not _word_ngrams(match.eval_text, ngram_n)
+        for match in exact
+    )
+    if not blind:
+        return None
+    flagged = len({match.eval_index for match in exact})
+    rate = calculate_contamination_rate(flagged, len(eval_texts))
+    shown = format_contamination_rate(rate)
+    return (
+        f"{shown} verbatim overlap remains; "
+        f"ngram cannot compare rows shorter than {ngram_n} words"
+    )

@@ -51,6 +51,14 @@ def load_report(path: str) -> dict[str, Any]:
             raise ValueError("Invalid report match score: expected a number between -1 and 1.")
         if "benchmark" in match and not isinstance(match["benchmark"], str):
             raise ValueError("Invalid report match benchmark: expected text.")
+    if "threshold" in data:
+        threshold = data["threshold"]
+        if (
+            isinstance(threshold, bool)
+            or not isinstance(threshold, (int, float))
+            or not math.isfinite(threshold)
+        ):
+            raise ValueError("Invalid report threshold: expected a finite number.")
     for field in ("methods_used", "benchmarks"):
         value = data.get(field, [])
         if not isinstance(value, list) or any(not isinstance(item, str) for item in value):

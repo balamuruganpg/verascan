@@ -2,15 +2,17 @@
 
 from __future__ import annotations
 
+import math
 from pathlib import Path
 from typing import NoReturn
 
 import typer
 
 from verascan._version import __version__
-from verascan.report import ContaminationReport
+from verascan.report import ContaminationReport, format_contamination_rate
 
 _USER_ERRORS = (OSError, ValueError, KeyError, TypeError, ImportError, RuntimeError)
+_REPORT_SUFFIXES = {".pdf", ".json", ".html"}
 
 app = typer.Typer(
     name="verascan",
@@ -26,16 +28,59 @@ def _fail(exc: Exception) -> NoReturn:
     raise typer.Exit(code=2) from exc
 
 
-def _write_report(
-    report: ContaminationReport, path: str, *, default: str, label_format: bool = True
-) -> None:
+def _require_finite_fail_above(fail_above: float) -> None:
+    if (
+        isinstance(fail_above, bool)
+        or not isinstance(fail_above, (int, float))
+        or not math.isfinite(fail_above)
+    ):
+        raise ValueError("--fail-above must be a finite number.")
+
+
+def _format_gate_percent(value: float) -> str:
+    """Format a gate threshold with the same rules as a contamination rate."""
+    if 0.0 <= value <= 1.0:
+        return format_contamination_rate(value)
+    return f"{value * 100:.6g}%"
+
+
+def _fail_gate(rate: float, fail_above: float) -> None:
+    if not rate > fail_above:
+        return
+    rate_text = format_contamination_rate(rate)
+    threshold_text = _format_gate_percent(fail_above)
+    # Never print the same percentage on both sides when the rate is higher.
+    if rate_text == threshold_text:
+        rate_text = f"{rate * 100:.6g}%"
+        threshold_text = f"{fail_above * 100:.6g}%"
+    typer.secho(
+        f"\n✘ FAIL: Contamination rate {rate_text} exceeds threshold {threshold_text}",
+        fg=typer.colors.RED,
+        err=True,
+    )
+    raise typer.Exit(code=1)
+
+
+def _require_distinct(left: str | None, right: str | None, message: str) -> None:
+    if left and right and Path(left).resolve() == Path(right).resolve():
+        raise ValueError(message)
+
+
+def _require_report_suffix(path: str) -> None:
+    if Path(path).suffix.lower() not in _REPORT_SUFFIXES:
+        raise ValueError("Report output must end in .pdf, .json, or .html.")
+
+
+def _write_report(report: ContaminationReport, path: str, *, label_format: bool = True) -> None:
     extension = Path(path).suffix.lower()
     if extension == ".pdf":
         kind, writer = "PDF", report.to_pdf
-    elif extension == ".html" or (extension != ".json" and default == "html"):
+    elif extension == ".html":
         kind, writer = "HTML", report.to_html
-    else:
+    elif extension == ".json":
         kind, writer = "JSON", report.to_json
+    else:
+        raise ValueError("Report output must end in .pdf, .json, or .html.")
     writer(path)
     label = f"{kind} report" if label_format else "Report"
     typer.echo(f"{label} written to: {path}")
@@ -112,6 +157,12 @@ def check(
     method_list = [m.strip() for m in methods.split(",") if m.strip()]
 
     try:
+        _require_finite_fail_above(fail_above)
+        _require_distinct(
+            output, output_cleaned, "--output and --output-cleaned must use different paths."
+        )
+        if output:
+            _require_report_suffix(output)
         report = run_check(
             train=train,
             eval=eval,
@@ -125,22 +176,14 @@ def check(
         )
         typer.echo(report.summary())
         if output:
-            _write_report(report, output, default="json")
+            _write_report(report, output)
         if output_cleaned:
             report.to_cleaned(output_cleaned)
             typer.echo(f"Cleaned eval written to: {output_cleaned}")
     except _USER_ERRORS as exc:
         _fail(exc)
 
-    # CI gate.
-    if report.contamination_rate > fail_above:
-        typer.secho(
-            f"\n✘ FAIL: Contamination rate {report.contamination_rate:.2%} "
-            f"exceeds threshold {fail_above:.2%}",
-            fg=typer.colors.RED,
-            err=True,
-        )
-        raise typer.Exit(code=1)
+    _fail_gate(report.contamination_rate, fail_above)
 
 
 @app.command()
@@ -208,7 +251,7 @@ def gpu(
             show_progress=not no_progress,
         )
         typer.echo(report.summary())
-        _write_report(report, output, default="json", label_format=False)
+        _write_report(report, output, label_format=False)
         if output_json:
             report.to_json(output_json)
             typer.echo(f"JSON report written to: {output_json}")
@@ -276,6 +319,11 @@ def split(
     from verascan.split import _split_loaded
 
     try:
+        _require_distinct(
+            output_train,
+            output_eval,
+            "--output-train and --output-eval must use different paths.",
+        )
         method_list = _validate_methods([m.strip() for m in methods.split(",") if m.strip()])
         parsed_eval_size = _parse_eval_size(eval_size)
         payload = load_eval_payload(input, column=column)
@@ -368,6 +416,12 @@ def audit(
     method_list = [m.strip() for m in methods.split(",") if m.strip()]
 
     try:
+        _require_finite_fail_above(fail_above)
+        _require_distinct(
+            output, output_json, "--output and --output-json must use different paths."
+        )
+        if output:
+            _require_report_suffix(output)
         report = run_audit(
             train=train,
             benchmarks=benchmark_list,
@@ -383,24 +437,11 @@ def audit(
         )
         typer.echo(report.summary())
         if output:
-            _write_report(
-                report,
-                output,
-                default="html",
-                label_format=Path(output).suffix.lower() in {".pdf", ".html", ".json"},
-            )
+            _write_report(report, output)
         if output_json:
             report.to_json(output_json)
             typer.echo(f"JSON report written to: {output_json}")
     except _USER_ERRORS as exc:
         _fail(exc)
 
-    # CI gate.
-    if report.contamination_rate > fail_above:
-        typer.secho(
-            f"\n✘ FAIL: Contamination rate {report.contamination_rate:.2%} "
-            f"exceeds threshold {fail_above:.2%}",
-            fg=typer.colors.RED,
-            err=True,
-        )
-        raise typer.Exit(code=1)
+    _fail_gate(report.contamination_rate, fail_above)
