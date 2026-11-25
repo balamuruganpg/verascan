@@ -12,7 +12,7 @@ from tqdm import tqdm
 from verascan.audit import AuditReport
 from verascan.benchmarks import load_benchmark, normalize_benchmarks
 from verascan.loaders import DataInput, load_eval_payload, load_texts
-from verascan.report import MatchRecord
+from verascan.report import MatchRecord, stored_similarity
 
 logger = logging.getLogger(__name__)
 
@@ -209,7 +209,7 @@ def _gpu_matches(
                         train_index=train_index,
                         eval_text=eval_texts[offset + row],
                         train_text=train[train_index],
-                        score=round(max(-1.0, min(1.0, score)), 4),
+                        score=stored_similarity(max(-1.0, min(1.0, score)), threshold),
                         method="semantic",
                     )
                 )

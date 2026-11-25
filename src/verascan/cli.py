@@ -44,15 +44,29 @@ def _format_gate_percent(value: float) -> str:
     return f"{value * 100:.6g}%"
 
 
+def _distinct_fail_percents(rate: float, fail_above: float) -> tuple[str, str]:
+    """Print the rate and the gate as two different percentages.
+
+    The summary format can round both to the same text while the rate is
+    still strictly higher (``33.3%`` and ``33.3%``, or ``0.5%`` and ``0.5%``).
+    Extra significant digits are added until the two shown numbers differ.
+    """
+    rate_text = format_contamination_rate(rate)
+    threshold_text = _format_gate_percent(fail_above)
+    if rate_text != threshold_text:
+        return rate_text, threshold_text
+    for digits in range(1, 18):
+        rate_text = f"{rate * 100:.{digits}g}%"
+        threshold_text = f"{fail_above * 100:.{digits}g}%"
+        if rate_text != threshold_text:
+            return rate_text, threshold_text
+    return f"{rate * 100:.17g}%", f"{fail_above * 100:.17g}%"
+
+
 def _fail_gate(rate: float, fail_above: float) -> None:
     if not rate > fail_above:
         return
-    rate_text = format_contamination_rate(rate)
-    threshold_text = _format_gate_percent(fail_above)
-    # Never print the same percentage on both sides when the rate is higher.
-    if rate_text == threshold_text:
-        rate_text = f"{rate * 100:.6g}%"
-        threshold_text = f"{fail_above * 100:.6g}%"
+    rate_text, threshold_text = _distinct_fail_percents(rate, fail_above)
     typer.secho(
         f"\n✘ FAIL: Contamination rate {rate_text} exceeds threshold {threshold_text}",
         fg=typer.colors.RED,

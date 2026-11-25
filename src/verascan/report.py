@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-import difflib
 import html
 import json
+import math
 from collections.abc import Sequence
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
@@ -38,18 +38,175 @@ class MatchRecord:
     diff: str | None = None  # word-level diff HTML (populated by report)
 
 
+def _steps_to_opcodes(
+    steps: list[tuple[int, int, int]],
+) -> list[tuple[str, int, int, int, int]]:
+    """Merge one-token edits into the opcode spans the reports render."""
+    tags = ("equal", "replace", "delete", "insert")
+    opcodes: list[tuple[str, int, int, int, int]] = []
+    for how, i, j in steps:
+        tag = tags[how]
+        if how == 0:
+            span = (tag, i, i + 1, j, j + 1)
+        elif how == 1:
+            span = (tag, i, i + 1, j, j + 1)
+        elif how == 2:
+            span = (tag, i, i + 1, j, j)
+        else:
+            span = (tag, i, i, j, j + 1)
+        if opcodes and opcodes[-1][0] == tag:
+            previous = opcodes[-1]
+            opcodes[-1] = (tag, previous[1], span[2], previous[3], span[4])
+        else:
+            opcodes.append(span)
+    return opcodes
+
+
+def _align_words_linear(a: list[str], b: list[str]) -> list[tuple[str, int, int, int, int]]:
+    """Diagonal alignment for sequences too long for the edit table.
+
+    A mismatch whose next tokens agree is a substitution. That keeps a
+    repeated word matched in place instead of striking a shifted copy.
+    """
+    steps: list[tuple[int, int, int]] = []
+    i = 0
+    j = 0
+    n = len(a)
+    m = len(b)
+    while i < n and j < m:
+        if a[i] == b[j]:
+            steps.append((0, i, j))
+            i += 1
+            j += 1
+        elif i + 1 < n and j + 1 < m and a[i + 1] == b[j + 1]:
+            steps.append((1, i, j))
+            i += 1
+            j += 1
+        elif j + 1 < m and a[i] == b[j + 1] and not (i + 1 < n and a[i + 1] == b[j]):
+            steps.append((3, i, j))
+            j += 1
+        elif i + 1 < n and a[i + 1] == b[j]:
+            steps.append((2, i, j))
+            i += 1
+        else:
+            steps.append((1, i, j))
+            i += 1
+            j += 1
+    while i < n:
+        steps.append((2, i, j))
+        i += 1
+    while j < m:
+        steps.append((3, i, j))
+        j += 1
+    return _steps_to_opcodes(steps)
+
+
+def _align_words(a: list[str], b: list[str]) -> list[tuple[str, int, int, int, int]]:
+    """Levenshtein word alignment. Ties stay on the diagonal.
+
+    One substitution costs the same as one insertion or one deletion. When
+    those costs tie, the diagonal edit wins, so a repeated token is replaced
+    where it changed. A shifted longest-match can instead strike copies that
+    appear on both sides and draw the real change at the other end.
+    """
+    if a == b:
+        return [("equal", 0, len(a), 0, len(b))] if a else []
+    n = len(a)
+    m = len(b)
+    if n * m > 1_000_000:
+        return _align_words_linear(a, b)
+    width = m + 1
+    dist = [0] * ((n + 1) * width)
+    parent = bytearray((n + 1) * width)
+
+    def at(i: int, j: int) -> int:
+        return i * width + j
+
+    for i in range(1, n + 1):
+        dist[at(i, 0)] = i
+        parent[at(i, 0)] = 2
+    for j in range(1, m + 1):
+        dist[at(0, j)] = j
+        parent[at(0, j)] = 3
+    for i in range(1, n + 1):
+        token = a[i - 1]
+        for j in range(1, m + 1):
+            diagonal = dist[at(i - 1, j - 1)] + (0 if token == b[j - 1] else 1)
+            best = diagonal
+            how = 0 if token == b[j - 1] else 1
+            delete = dist[at(i - 1, j)] + 1
+            if delete < best:
+                best = delete
+                how = 2
+            insert = dist[at(i, j - 1)] + 1
+            if insert < best:
+                best = insert
+                how = 3
+            dist[at(i, j)] = best
+            parent[at(i, j)] = how
+    steps: list[tuple[int, int, int]] = []
+    i = n
+    j = m
+    while i > 0 or j > 0:
+        how = parent[at(i, j)]
+        if how in (0, 1):
+            steps.append((how, i - 1, j - 1))
+            i -= 1
+            j -= 1
+        elif how == 2:
+            steps.append((2, i - 1, j))
+            i -= 1
+        else:
+            steps.append((3, i, j - 1))
+            j -= 1
+    steps.reverse()
+    return _steps_to_opcodes(steps)
+
+
 def _word_diff_opcodes(
     train: str, eval_text: str
 ) -> tuple[list[str], list[str], list[tuple[str, int, int, int, int]]]:
     """Word alignment shared by the HTML report and the PDF report.
 
-    ``autojunk`` is off. The default treats a token that is more than 1% of a
-    long sequence as junk and can delete a run of words the other report keeps.
+    See :func:`_align_words`. A repeated word that still appears on both
+    sides stays unmarked; only the tokens that actually changed are struck.
     """
     train_words = train.split()
     eval_words = eval_text.split()
-    opcodes = difflib.SequenceMatcher(None, train_words, eval_words, autojunk=False).get_opcodes()
-    return train_words, eval_words, opcodes
+    return train_words, eval_words, _align_words(train_words, eval_words)
+
+
+# A normalized vector dotted with itself can miss 1 by a few millionths.
+# 0.99996 is far enough below 1 that four-decimal rounding must not call it perfect.
+_AGREEMENT_EPSILON = 1e-5
+
+
+def stored_similarity(score: float, threshold: float) -> float:
+    """Four-decimal similarity that stays faithful to the admitting comparison.
+
+    Fuzzy Jaccard estimates and semantic cosines use this one rule:
+
+    - round to four decimal places;
+    - a value of at least 1, or within float error of 1, stays 1;
+    - any lower value is never stored as 1 (rounding 0.99996 must not invent
+      a perfect score);
+    - if rounding would fall under *threshold*, store the next four-decimal
+      value that still meets *threshold*;
+    - if that adjustment would itself be a manufactured 1, store *score*
+      unchanged so ``flagged(min_score=threshold)`` still contains the pair.
+    """
+    clamped = max(-1.0, min(1.0, float(score)))
+    stored = round(clamped, 4)
+    if clamped < 1.0 - _AGREEMENT_EPSILON and stored >= 1.0:
+        stored = 0.9999
+    if stored < threshold:
+        bumped = math.floor(float(threshold) * 10000 + 1) / 10000
+        if bumped > 1.0:
+            bumped = 1.0
+        if (bumped >= 1.0 and clamped < 1.0) or bumped < threshold:
+            return clamped
+        stored = bumped
+    return stored
 
 
 def format_match_score(score: float) -> str:

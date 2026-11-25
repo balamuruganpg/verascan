@@ -9,6 +9,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.3] - 2026-11-25
+
+### Fixed
+
+- Semantic scores keep a verbatim passage that is contained in a longer
+  document, including a passage the document ends with. A score of 1.0 still
+  means the compared passages agree.
+- An n-gram-only split reports verbatim overlap when repeated long rows lose
+  their grams to the frequency cap, instead of claiming no residual leakage.
+- The `--fail-above` failure line shows two different percentages when the
+  summary format would round the rate and the gate to the same text.
+- Fuzzy and semantic scores stay at or above the threshold that admitted the
+  pair. Four-decimal rounding no longer turns a cosine below 1 into 1.0.
+- HTML and PDF word diffs replace a repeated word in place, so copies that
+  appear on both sides are not struck.
+- PDF word diffs name control characters the bundled font cannot draw, in the
+  same way they name an omitted emoji.
+
 ## [0.6.2] - 2026-11-25
 
 ### Fixed

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import html
-import re
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -51,14 +50,19 @@ def _show_text(text: str) -> str:
 
 
 def _safe(text: str) -> str:
-    visible = _show_text(re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f]", "", text))
+    # Name controls the font cannot draw. Stripping them first turned a NUL
+    # into the surrounding letters and left no omission note.
+    visible = _show_text(text)
     return html.escape(visible).replace("\n", "<br/>")
 
 
 def _diff(train: str, eval_text: str) -> str:
     from verascan.report import _word_diff_opcodes
 
-    train_words, eval_words, opcodes = _word_diff_opcodes(train, eval_text)
+    # ``str.split`` drops tab and vertical tab before a word is drawn.
+    # Naming those controls first keeps the same ``[U+XXXX omitted]`` mark
+    # ``_show_text`` uses for an emoji the font cannot draw.
+    train_words, eval_words, opcodes = _word_diff_opcodes(_show_text(train), _show_text(eval_text))
     parts: list[str] = []
     for tag, i, j, k, end in opcodes:
         if tag == "equal":

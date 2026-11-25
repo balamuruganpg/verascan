@@ -11,7 +11,7 @@ import numpy as np
 from datasketch import MinHash
 from tqdm import tqdm
 
-from verascan.report import MatchRecord
+from verascan.report import MatchRecord, stored_similarity
 
 _SHINGLE_SIZE = 5  # character n-gram length
 
@@ -72,13 +72,17 @@ def find_fuzzy_matches(
         eval_hash = _make_minhash(_shingle(eval_text), num_perm).hashvalues
         scores = (signatures == eval_hash).mean(axis=1)
         for train_idx in np.flatnonzero(scores >= threshold):
+            # ``stored_similarity`` keeps the four-decimal score on the
+            # admitting side of ``threshold``. Rounding 0.765625 down to
+            # 0.7656 would hide a pair this scan just accepted.
+            admitted = stored_similarity(float(scores[train_idx]), threshold)
             matches.append(
                 MatchRecord(
                     eval_index=eval_idx,
                     train_index=int(train_idx),
                     eval_text=eval_text,
                     train_text=train_texts[int(train_idx)],
-                    score=round(float(scores[train_idx]), 4),
+                    score=admitted,
                     method="fuzzy",
                 )
             )

@@ -658,6 +658,8 @@ def test_pdf_records_emoji_the_font_cannot_draw(tmp_path: Path) -> None:
     nul_path = tmp_path / "nul.pdf"
     nul.to_pdf(str(nul_path))
     nul_text = _pdf_text(nul_path)
-    assert "U+0000" not in nul_text
-    assert "hello" in nul_text
+    # The NUL is an omitted control, named the same way as an undrawable emoji.
+    assert "U+0000" in nul_text
+    assert "omitted" in nul_text
+    assert "hel" in nul_text
     assert math.isfinite(report.matches[0].score)

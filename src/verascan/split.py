@@ -265,7 +265,12 @@ def _split_loaded(
             moved_count += len(flagged_original_indices)
 
     residual_leakage = _ngram_blind_residual(
-        all_texts, train_indices, eval_indices, methods, ngram_n
+        all_texts,
+        train_indices,
+        eval_indices,
+        methods,
+        ngram_n,
+        ngram_max_count,
     )
     train_data = _slice_payload(payload, train_indices)
     eval_data = _slice_payload(payload, eval_indices)
@@ -297,12 +302,14 @@ def _ngram_blind_residual(
     eval_indices: list[int],
     methods: list[str],
     ngram_n: int,
+    ngram_max_count: int,
 ) -> str | None:
     """Describe verbatim copies an n-gram-only split cannot see.
 
-    N-gram overlap needs ``ngram_n`` words. Identical shorter rows stay in
-    both splits, so a residual of 0% would be false. Other methods can see
-    those copies, and rows long enough to form n-grams keep the 0% line.
+    N-gram overlap needs ``ngram_n`` words, and a gram that appears in at
+    least ``ngram_max_count`` training rows is dropped before scoring. Either
+    blind spot leaves identical copies in both splits, so a residual of 0%
+    would be false. The scan has already moved every pair n-gram can see.
     """
     if set(methods) != {"ngram"} or not train_indices or not eval_indices:
         return None
@@ -314,16 +321,19 @@ def _ngram_blind_residual(
     exact = find_exact_matches(train_texts, eval_texts, show_progress=False)
     if not exact:
         return None
-    blind = any(
-        not _word_ngrams(match.train_text, ngram_n) or not _word_ngrams(match.eval_text, ngram_n)
-        for match in exact
-    )
-    if not blind:
-        return None
     flagged = len({match.eval_index for match in exact})
     rate = calculate_contamination_rate(flagged, len(eval_texts))
     shown = format_contamination_rate(rate)
+    too_short = any(
+        not _word_ngrams(match.train_text, ngram_n) or not _word_ngrams(match.eval_text, ngram_n)
+        for match in exact
+    )
+    if too_short:
+        return (
+            f"{shown} verbatim overlap remains; "
+            f"ngram cannot compare rows shorter than {ngram_n} words"
+        )
     return (
         f"{shown} verbatim overlap remains; "
-        f"ngram cannot compare rows shorter than {ngram_n} words"
+        f"ngram dropped grams appearing in at least {ngram_max_count} training rows"
     )
