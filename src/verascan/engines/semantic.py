@@ -93,6 +93,16 @@ _PASSAGE_STRIDE = 16
 _SAME_WINDOW = 0.9995
 _IDENTITY_CAP = 0.9999
 _SIM_CHUNK = 4096
+# A one-word or other short token span is not a contained passage.
+_MIN_CONTAINED_TOKENS = 6
+# One edited word inside a passage at least this long still clears 0.85.
+_MIN_NEAR_WORDS = 6
+_NEAR_CONTAINED_SCORE = 0.95
+# A passage split across documents is covered by pieces at least this long.
+_MIN_SPLIT_PIECE = 3
+_MIN_SPLIT_EVAL_WORDS = 6
+_SPLIT_COVER_SCORE = 0.90
+_SPLIT_STEP_BUDGET = 2_000_000
 
 
 def _validate_semantic_threshold(threshold: float) -> None:
@@ -234,27 +244,165 @@ def _pair_contains(eval_ids: list[Any] | None, train_ids: list[Any] | None) -> b
     """True when one text's tokens are a proper subspan of the other's.
 
     Equal lengths are document identity and stay on the embedding path.
-    Blank token lists are not a passage contained in something else.
+    Blank token lists are not a passage contained in something else. A span
+    shorter than :data:`_MIN_CONTAINED_TOKENS` is not a passage either: one
+    common word is a subspan of almost any document.
     """
     if not eval_ids or not train_ids or len(eval_ids) == len(train_ids):
         return False
     if len(eval_ids) < len(train_ids):
+        if len(eval_ids) < _MIN_CONTAINED_TOKENS:
+            return False
         return _contains_token_span(train_ids, eval_ids)
+    if len(train_ids) < _MIN_CONTAINED_TOKENS:
+        return False
     return _contains_token_span(eval_ids, train_ids)
 
 
-def _score_contained_span(threshold: float) -> float:
-    """Score a verbatim contained passage.
+def _score_contained_span() -> float:
+    """Score a verbatim contained passage below whole-document agreement.
 
     Identical tokens embed to the same vector, so the span cosine is 1.
-    When *threshold* is at most the identity cap, the pair is stored at that
-    cap: one matching window is not whole-document agreement, and a score of
-    1 still means every compared window agrees. A higher threshold keeps the
-    true cosine, which is the only value that still clears it.
+    The pair is stored at the identity cap even when the threshold is higher.
+    A threshold above the cap then leaves the pair unmatched. Promoting the
+    score to 1.0 would claim the shorter text is the same document.
     """
-    if threshold <= _IDENTITY_CAP:
-        return _IDENTITY_CAP
-    return 1.0
+    return _IDENTITY_CAP
+
+
+def _words(text: str) -> list[str]:
+    return text.lower().split()
+
+
+def _one_word_off(shorter: list[str], longer: list[str]) -> bool:
+    """True when *shorter* matches one contiguous slice of *longer* except one word."""
+    span = len(shorter)
+    if span < _MIN_NEAR_WORDS or span >= len(longer):
+        return False
+    last = len(longer) - span
+    for start in range(last + 1):
+        diffs = 0
+        matched = True
+        for offset in range(span):
+            if longer[start + offset] != shorter[offset]:
+                diffs += 1
+                if diffs > 1:
+                    matched = False
+                    break
+        if matched and diffs == 1:
+            return True
+    return False
+
+
+def _texts_near_contained(left: str, right: str) -> bool:
+    """True when the shorter text is a contained passage with one word changed.
+
+    Equal lengths stay on the embedding path. Two long documents that differ
+    by one word are not a short passage inside a longer one.
+    """
+    left_words = _words(left)
+    right_words = _words(right)
+    if len(left_words) < len(right_words):
+        return _one_word_off(left_words, right_words)
+    if len(right_words) < len(left_words):
+        return _one_word_off(right_words, left_words)
+    return False
+
+
+def _split_passage_pairs(
+    train_texts: list[str], eval_texts: list[str]
+) -> set[tuple[int, int]]:
+    """Training rows that together tile an evaluation passage.
+
+    Each piece is a contiguous run of at least :data:`_MIN_SPLIT_PIECE`
+    words. A cover that uses only one document is verbatim containment and
+    is left to that path. The step budget skips pathological repetition
+    instead of hanging the scan.
+    """
+    train_words = [_words(text) for text in train_texts]
+    positions: dict[str, list[tuple[int, int]]] = {}
+    for doc_index, words in enumerate(train_words):
+        for pos, word in enumerate(words):
+            positions.setdefault(word, []).append((doc_index, pos))
+
+    pairs: set[tuple[int, int]] = set()
+    steps = 0
+    for eval_index, eval_text in enumerate(eval_texts):
+        words = _words(eval_text)
+        length = len(words)
+        if length < _MIN_SPLIT_EVAL_WORDS:
+            continue
+        can_cover = [False] * (length + 1)
+        can_cover[length] = True
+        choice: list[tuple[int, int] | None] = [None] * length
+        aborted = False
+        for start in range(length - 1, -1, -1):
+            found = False
+            for doc_index, pos in positions.get(words[start], ()):
+                steps += 1
+                if steps > _SPLIT_STEP_BUDGET:
+                    aborted = True
+                    break
+                document = train_words[doc_index]
+                limit = min(len(document) - pos, length - start)
+                matched = 0
+                while matched < limit and document[pos + matched] == words[start + matched]:
+                    matched += 1
+                    steps += 1
+                    if steps > _SPLIT_STEP_BUDGET:
+                        aborted = True
+                        break
+                if aborted:
+                    break
+                piece = _MIN_SPLIT_PIECE
+                while piece <= matched:
+                    if can_cover[start + piece]:
+                        can_cover[start] = True
+                        choice[start] = (piece, doc_index)
+                        found = True
+                        break
+                    piece += 1
+                if found:
+                    break
+            if aborted:
+                break
+        if aborted or not can_cover[0]:
+            continue
+        docs: set[int] = set()
+        cursor = 0
+        while cursor < length:
+            picked = choice[cursor]
+            if picked is None:
+                docs = set()
+                break
+            piece, doc_index = picked
+            docs.add(doc_index)
+            cursor += piece
+        if len(docs) < 2:
+            continue
+        for doc_index in docs:
+            pairs.add((eval_index, doc_index))
+    return pairs
+
+
+def _adjust_semantic_score(
+    eval_text: str,
+    train_text: str,
+    eval_ids: list[Any] | None,
+    train_ids: list[Any] | None,
+    cosine: float,
+    *,
+    split_pair: bool,
+) -> float:
+    """Prefer a lexical passage score over a diluted window cosine."""
+    if _pair_contains(eval_ids, train_ids):
+        return _score_contained_span()
+    base = cosine if math.isfinite(cosine) else -math.inf
+    if _texts_near_contained(eval_text, train_text):
+        return min(max(base, _NEAR_CONTAINED_SCORE), _IDENTITY_CAP)
+    if split_pair:
+        return min(max(base, _SPLIT_COVER_SCORE), _IDENTITY_CAP)
+    return cosine
 
 
 def _encode_matrix(model: Any, texts: list[str], batch_size: int, show_progress: bool) -> Any:
@@ -318,6 +466,7 @@ def _faiss_matches(
     eval_texts: list[str],
     train_ids: list[list[Any] | None],
     eval_ids: list[list[Any] | None],
+    split_pairs: set[tuple[int, int]],
     *,
     threshold: float,
     batch_size: int,
@@ -349,9 +498,14 @@ def _faiss_matches(
             if train_idx < 0 or train_idx in seen:
                 continue
             seen.add(train_idx)
-            raw_score = float(scores_all[eval_idx][rank])
-            if _pair_contains(eval_ids[eval_idx], train_ids[train_idx]):
-                raw_score = _score_contained_span(threshold)
+            raw_score = _adjust_semantic_score(
+                eval_texts[eval_idx],
+                train_texts[train_idx],
+                eval_ids[eval_idx],
+                train_ids[train_idx],
+                float(scores_all[eval_idx][rank]),
+                split_pair=(eval_idx, train_idx) in split_pairs,
+            )
             _append_match(
                 matches,
                 eval_idx=eval_idx,
@@ -372,6 +526,7 @@ def _passage_matches(
     eval_segments: list[list[str]],
     train_ids: list[list[Any] | None],
     eval_ids: list[list[Any] | None],
+    split_pairs: set[tuple[int, int]],
     *,
     threshold: float,
     batch_size: int,
@@ -406,12 +561,17 @@ def _passage_matches(
         ranked: list[tuple[float, int]] = []
         for train_idx, (train_start, train_end) in enumerate(train_spans):
             evidence, fully_same = _pair_evidence(eval_mat, train_emb[train_start:train_end])
-            if _pair_contains(eval_ids[eval_idx], train_ids[train_idx]):
-                # The short passage is one token slice of the longer text.
-                # Fixed windows dilute that slice; the span cosine does not.
-                raw = _score_contained_span(threshold)
-            else:
-                raw = evidence if fully_same else min(evidence, _IDENTITY_CAP)
+            # Fixed windows dilute a short passage. Lexical containment,
+            # a one-word edit, or a split across documents replaces that cosine.
+            cosine = evidence if fully_same else min(evidence, _IDENTITY_CAP)
+            raw = _adjust_semantic_score(
+                eval_texts[eval_idx],
+                train_texts[train_idx],
+                eval_ids[eval_idx],
+                train_ids[train_idx],
+                cosine,
+                split_pair=(eval_idx, train_idx) in split_pairs,
+            )
             if raw >= threshold:
                 ranked.append((raw, train_idx))
         for raw, train_idx in sorted(ranked, key=lambda item: (-item[0], item[1])):
@@ -443,11 +603,16 @@ def find_semantic_matches(
     texts are split into overlapping passages. A score of 1.0 means those
     passages agree; a shared prefix alone cannot report document identity.
 
-    A verbatim passage contained in the other text is scored from that token
-    span, including an evaluation row that is exactly the ending of a longer
-    training row. The span cosine is 1. It is reported below 1 when the
-    identity cap still meets *threshold*, so containment clears the threshold
-    without claiming the two documents are the same text.
+    A verbatim passage of at least six tokens contained in the other text is
+    scored from that token span, including an evaluation row that is exactly
+    the ending of a longer training row. The span cosine is 1. It is reported
+    at the identity cap, which is below 1, including when *threshold* is
+    higher than the cap. A higher threshold does not relabel the shorter
+    text as the same document.
+
+    One changed word inside such a passage, and a passage whose contiguous
+    pieces sit in different training rows, stay at or above the default
+    threshold without using the identity cap. A single common word does not.
 
     Parameters
     ----------
@@ -485,6 +650,7 @@ def find_semantic_matches(
     eval_segments = [segments for segments, _ids in prepared_eval]
     train_ids = [ids for _segments, ids in prepared_train]
     eval_ids = [ids for _segments, ids in prepared_eval]
+    split_pairs = _split_passage_pairs(train_texts, eval_texts)
     windowed = any(
         len(segments) != 1 or segments[0] != text
         for segments, text in zip(train_segments, train_texts)
@@ -501,6 +667,7 @@ def find_semantic_matches(
             eval_segments,
             train_ids,
             eval_ids,
+            split_pairs,
             threshold=threshold,
             batch_size=batch_size,
             show_progress=show_progress,
@@ -512,6 +679,7 @@ def find_semantic_matches(
             eval_texts,
             train_ids,
             eval_ids,
+            split_pairs,
             threshold=threshold,
             batch_size=batch_size,
             show_progress=show_progress,

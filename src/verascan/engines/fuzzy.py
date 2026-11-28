@@ -11,17 +11,26 @@ import numpy as np
 from datasketch import MinHash
 from tqdm import tqdm
 
+from verascan.normalize import match_keys
 from verascan.report import MatchRecord, stored_similarity
 
 _SHINGLE_SIZE = 5  # character n-gram length
 
 
 def _shingle(text: str, k: int = _SHINGLE_SIZE) -> set[str]:
-    """Return the set of character k-grams in *text*."""
-    text = " ".join(text.lower().split())  # normalise whitespace
+    """Return the set of character k-grams in an already folded *text*."""
     if len(text) < k:
         return {text}
     return {text[i : i + k] for i in range(len(text) - k + 1)}
+
+
+def _signature_pair(text: str, num_perm: int) -> tuple[np.ndarray, np.ndarray]:
+    """MinHash both format-character readings. They coincide when there are none."""
+    deleted, spaced = match_keys(text)
+    primary = _make_minhash(_shingle(deleted), num_perm).hashvalues
+    if deleted == spaced:
+        return primary, primary
+    return primary, _make_minhash(_shingle(spaced), num_perm).hashvalues
 
 
 def _make_minhash(shingles: set[str], num_perm: int) -> MinHash:
@@ -60,17 +69,23 @@ def find_fuzzy_matches(
     if not train_texts or not eval_texts:
         return []
 
-    train_hashes = []
+    train_deleted: list[np.ndarray] = []
+    train_spaced: list[np.ndarray] = []
     for text in tqdm(train_texts, desc="MinHash train", disable=not show_progress, leave=False):
-        train_hashes.append(_make_minhash(_shingle(text), num_perm).hashvalues)
-    signatures = np.stack(train_hashes)
+        deleted, spaced = _signature_pair(text, num_perm)
+        train_deleted.append(deleted)
+        train_spaced.append(spaced)
+    signatures = np.stack(train_deleted)
+    spaced_signatures = np.stack(train_spaced)
 
     matches: list[MatchRecord] = []
     for eval_idx, eval_text in enumerate(
         tqdm(eval_texts, desc="Fuzzy scan", disable=not show_progress, leave=False)
     ):
-        eval_hash = _make_minhash(_shingle(eval_text), num_perm).hashvalues
-        scores = (signatures == eval_hash).mean(axis=1)
+        eval_deleted, eval_spaced = _signature_pair(eval_text, num_perm)
+        deleted_scores = (signatures == eval_deleted).mean(axis=1)
+        spaced_scores = (spaced_signatures == eval_spaced).mean(axis=1)
+        scores = np.maximum(deleted_scores, spaced_scores)
         for train_idx in np.flatnonzero(scores >= threshold):
             # ``stored_similarity`` keeps the four-decimal score on the
             # admitting side of ``threshold``. Rounding 0.765625 down to

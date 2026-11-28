@@ -10,12 +10,8 @@ from collections import defaultdict
 
 from tqdm import tqdm
 
+from verascan.normalize import match_keys
 from verascan.report import MatchRecord
-
-
-def _normalise(text: str) -> str:
-    """Lowercase, strip, and collapse whitespace for stable hashing."""
-    return " ".join(text.lower().split())
 
 
 def _hash(text: str) -> str:
@@ -30,8 +26,10 @@ def find_exact_matches(
 ) -> list[MatchRecord]:
     """Return exact duplicates between *train_texts* and *eval_texts*.
 
-    Normalisation (lowercased, whitespace-collapsed) is applied before
-    comparison so that trivially different formatting is ignored.
+    Normalisation (lowercased, whitespace-collapsed, format characters and
+    confusable letters folded) is applied before comparison so that trivially
+    different formatting is ignored. A zero-width space is matched both when
+    it is removed and when it is read as a space.
 
     Complexity: O(n + m) where n = len(train_texts), m = len(eval_texts).
     """
@@ -40,16 +38,19 @@ def find_exact_matches(
     for idx, text in enumerate(
         tqdm(train_texts, desc="Hashing train", disable=not show_progress, leave=False)
     ):
-        h = _hash(_normalise(text))
-        train_index[h].append(idx)
+        for key in dict.fromkeys(match_keys(text)):
+            train_index[_hash(key)].append(idx)
 
     matches: list[MatchRecord] = []
     for eval_idx, eval_text in enumerate(
         tqdm(eval_texts, desc="Exact scan", disable=not show_progress, leave=False)
     ):
-        h = _hash(_normalise(eval_text))
-        if h in train_index:
-            for train_idx in train_index[h]:
+        seen: set[int] = set()
+        for key in dict.fromkeys(match_keys(eval_text)):
+            for train_idx in train_index.get(_hash(key), ()):
+                if train_idx in seen:
+                    continue
+                seen.add(train_idx)
                 matches.append(
                     MatchRecord(
                         eval_index=eval_idx,

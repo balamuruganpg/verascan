@@ -119,6 +119,8 @@ show a completion panel and audit scope instead of empty charts.
 The status labels are display categories: **Clean = 0%**, **Low < 5%**, and
 **High ≥ 5%**. They are not statistical confidence estimates. Percentages display
 up to six decimal places, using scientific notation for smaller nonzero rates.
+A rate that would round to 100% but is not the whole evaluation set keeps extra
+digits instead of printing 100.0%.
 
 ### Inspect a pair, not just a number
 
@@ -265,10 +267,10 @@ verascan check --train train.jsonl --eval eval.jsonl --fail-above 0.01
 
 | Method | Detects | Optional dependency |
 | --- | --- | --- |
-| `exact` | Normalized verbatim duplicates. | Core installation. |
-| `ngram` | Shared word passages; 13-word grams by default. | Core installation. |
-| `fuzzy` | Near-duplicates using MinHash Jaccard estimates. | Core installation. |
-| `semantic` | Similar meaning using normalized sentence embeddings and FAISS search. | `semantic` extra. |
+| `exact` | Normalized verbatim duplicates, including copies that differ by invisible characters or Cyrillic lookalike letters. | Core installation. |
+| `ngram` | Shared word passages; 13-word grams by default. Grams that appear in too many training rows are dropped, and a split says so when that is why overlap remains. | Core installation. |
+| `fuzzy` | Near-duplicates using MinHash Jaccard estimates, with the same invisible-character and homoglyph folding as exact. | Core installation. |
+| `semantic` | Similar meaning using normalized sentence embeddings and FAISS search. A contained passage scores below 1. A score of 1.0 means the passages agree. | `semantic` extra. |
 
 For offline benchmark examples, `verascan audit --synthetic` uses small synthetic
 stand-ins. It does not measure contamination against the actual public benchmarks.
@@ -342,7 +344,9 @@ Each `MatchRecord` has `eval_index`, `train_index`, `eval_text`, `train_text`,
 
 - **Similarity is evidence to review.** Scores are method-specific: exact matches
   score `1.0`; fuzzy matching uses Jaccard similarity; semantic matching uses
-  cosine similarity. They are not probabilities of training-data exposure.
+  cosine similarity. A semantic score of `1.0` means the compared passages agree.
+  A verbatim passage inside a longer document stays below 1. They are not
+  probabilities of training-data exposure.
 - **A clean report has a scope.** It applies to the supplied examples, methods,
   model and threshold. It does not prove that a larger corpus has no leakage.
 - **Short text changes detection behavior.** Word n-gram matching needs at least

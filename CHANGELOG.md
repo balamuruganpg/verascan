@@ -9,6 +9,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.4] - 2026-11-28
+
+### Fixed
+
+- Semantic containment no longer scores a short token span, including one
+  common word, as a verbatim passage. A passage of at least six tokens that
+  sits inside a longer document still scores below 1.
+- One edited word inside a contained passage stays above the default
+  threshold. A passage split across two training documents does too. A score
+  of 1.0 still means the compared passages agree.
+- A contained passage stays at 0.9999 when the threshold is above that cap,
+  so a shorter document is not stored as a perfect match.
+- An n-gram split reports residual overlap when retained rows share a gram
+  the frequency cap removed, including rows that are not exact copies. A mix
+  of short copies and capped long copies names both limits.
+- `--fail-above` prints two different percentages when the rate and the gate
+  collapse to one float after multiplying by 100. A rate that would round to
+  100% but is not the whole evaluation set keeps extra digits.
+- A cosine below 1 is not stored as 1.0, including 0.999991. The match label
+  does not print 1.0000 for a score kept below 1.
+- HTML and PDF word diffs leave a line unmarked when both sides contain the
+  same words, including a word that only moved. A tab that does not change
+  those words is unmarked in both reports. A tab the PDF font cannot draw is
+  still named when that row contains it.
+- The default exact and fuzzy scan folds zero-width characters and Cyrillic
+  homoglyphs, so those copies are not reported as clean.
+
 ## [0.6.3] - 2026-11-25
 
 ### Fixed

@@ -5,6 +5,7 @@ from __future__ import annotations
 import html
 import json
 import math
+from collections import Counter
 from collections.abc import Sequence
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
@@ -109,7 +110,9 @@ def _align_words(a: list[str], b: list[str]) -> list[tuple[str, int, int, int, i
     where it changed. A shifted longest-match can instead strike copies that
     appear on both sides and draw the real change at the other end.
     """
-    if a == b:
+    if a == b or Counter(a) == Counter(b):
+        # Same words, including a moved copy. Striking one of them deletes a
+        # token both sides still contain. Only a real count change is marked.
         return [("equal", 0, len(a), 0, len(b))] if a else []
     n = len(a)
     m = len(b)
@@ -176,9 +179,9 @@ def _word_diff_opcodes(
     return train_words, eval_words, _align_words(train_words, eval_words)
 
 
-# A normalized vector dotted with itself can miss 1 by a few millionths.
-# 0.99996 is far enough below 1 that four-decimal rounding must not call it perfect.
-_AGREEMENT_EPSILON = 1e-5
+# A normalized vector dotted with itself can miss 1 by a fraction of a millionth.
+# 0.999991 is far enough below 1 that rounding must not call it perfect.
+_AGREEMENT_EPSILON = 1e-6
 
 
 def stored_similarity(score: float, threshold: float) -> float:
@@ -187,9 +190,9 @@ def stored_similarity(score: float, threshold: float) -> float:
     Fuzzy Jaccard estimates and semantic cosines use this one rule:
 
     - round to four decimal places;
-    - a value of at least 1, or within float error of 1, stays 1;
-    - any lower value is never stored as 1 (rounding 0.99996 must not invent
-      a perfect score);
+    - a value of at least 1, or within a millionth of 1, stays 1;
+    - any lower value is never stored as 1 (rounding 0.99996 or 0.999991
+      must not invent a perfect score);
     - if rounding would fall under *threshold*, store the next four-decimal
       value that still meets *threshold*;
     - if that adjustment would itself be a manufactured 1, store *score*
@@ -210,8 +213,19 @@ def stored_similarity(score: float, threshold: float) -> float:
 
 
 def format_match_score(score: float) -> str:
-    """Format a stored match score so HTML and PDF show the same digits."""
-    return f"{score:.4f}"
+    """Format a stored match score so HTML and PDF show the same digits.
+
+    Four decimals are the usual label. A score kept below 1 so it would not
+    be stored as a perfect match must not round back to ``1.0000``.
+    """
+    rendered = f"{score:.4f}"
+    if not score < 1.0 or rendered != "1.0000":
+        return rendered
+    for decimals in range(5, 16):
+        finer = f"{score:.{decimals}f}"
+        if finer[0] != "1":
+            return finer.rstrip("0").rstrip(".")
+    return f"{score:.16g}"
 
 
 def _word_diff_html(a: str, b: str) -> str:
@@ -247,6 +261,13 @@ def format_contamination_rate(rate: float) -> str:
     if rate < _HIGH_CONTAMINATION_RATE and standard == "5.0%":
         precise = f"{pct:.6f}".rstrip("0").rstrip(".")
         return f"{precise}%" if precise != "5" else "<5.0%"
+    # 0.9995 is not the whole evaluation set. One decimal would print 100.0%.
+    if rate < 1.0 and standard == "100.0%":
+        for decimals in range(2, 16):
+            precise = f"{pct:.{decimals}f}".rstrip("0").rstrip(".")
+            if precise != "100":
+                return f"{precise}%"
+        return f"{pct:.16g}%"
     if standard != "0.0%":
         return standard
     for decimals in (3, 4, 5, 6):

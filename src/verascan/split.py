@@ -296,6 +296,31 @@ def _split_loaded(
     return train_data, eval_data, summary
 
 
+def _capped_eval_indexes(
+    train_texts: list[str],
+    eval_texts: list[str],
+    ngram_n: int,
+    ngram_max_count: int,
+) -> set[int]:
+    """Eval rows that share a training gram dropped by the frequency cap."""
+    from collections import Counter
+
+    from verascan.engines.ngram import _word_ngrams
+
+    doc_freq: Counter[str] = Counter()
+    for text in train_texts:
+        for gram in set(_word_ngrams(text, ngram_n)):
+            doc_freq[gram] += 1
+    capped = {gram for gram, count in doc_freq.items() if count >= ngram_max_count}
+    if not capped:
+        return set()
+    shared: set[int] = set()
+    for index, text in enumerate(eval_texts):
+        if set(_word_ngrams(text, ngram_n)) & capped:
+            shared.add(index)
+    return shared
+
+
 def _ngram_blind_residual(
     texts: list[str],
     train_indices: list[int],
@@ -304,36 +329,58 @@ def _ngram_blind_residual(
     ngram_n: int,
     ngram_max_count: int,
 ) -> str | None:
-    """Describe verbatim copies an n-gram-only split cannot see.
+    """Describe overlap an n-gram split cannot see.
 
     N-gram overlap needs ``ngram_n`` words, and a gram that appears in at
     least ``ngram_max_count`` training rows is dropped before scoring. Either
-    blind spot leaves identical copies in both splits, so a residual of 0%
-    would be false. The scan has already moved every pair n-gram can see.
+    blind spot can leave copies in both splits. Rows that share one capped
+    gram are not exact copies, so an exact rematch alone reports nothing.
+    The scan has already moved every pair the selected methods can see.
     """
-    if set(methods) != {"ngram"} or not train_indices or not eval_indices:
+    if not train_indices or not eval_indices:
         return None
     from verascan.engines.exact import find_exact_matches
     from verascan.engines.ngram import _word_ngrams
 
     train_texts = [texts[index] for index in train_indices]
     eval_texts = [texts[index] for index in eval_indices]
-    exact = find_exact_matches(train_texts, eval_texts, show_progress=False)
-    if not exact:
+    if set(methods) == {"ngram"}:
+        exact = find_exact_matches(train_texts, eval_texts, show_progress=False)
+        if exact:
+            flagged = len({match.eval_index for match in exact})
+            shown = format_contamination_rate(
+                calculate_contamination_rate(flagged, len(eval_texts))
+            )
+            short = False
+            long = False
+            for match in exact:
+                if not _word_ngrams(match.train_text, ngram_n) or not _word_ngrams(
+                    match.eval_text, ngram_n
+                ):
+                    short = True
+                else:
+                    long = True
+            reasons: list[str] = []
+            if short:
+                reasons.append(f"ngram cannot compare rows shorter than {ngram_n} words")
+            if long:
+                reasons.append(
+                    f"ngram dropped grams appearing in at least {ngram_max_count} training rows"
+                )
+            if reasons:
+                detail = reasons[0] if len(reasons) == 1 else ", and ".join(reasons)
+                return f"{shown} verbatim overlap remains; {detail}"
+
+    capped = _capped_eval_indexes(train_texts, eval_texts, ngram_n, ngram_max_count)
+    if not capped:
         return None
-    flagged = len({match.eval_index for match in exact})
-    rate = calculate_contamination_rate(flagged, len(eval_texts))
-    shown = format_contamination_rate(rate)
-    too_short = any(
-        not _word_ngrams(match.train_text, ngram_n) or not _word_ngrams(match.eval_text, ngram_n)
-        for match in exact
-    )
-    if too_short:
+    shown = format_contamination_rate(calculate_contamination_rate(len(capped), len(eval_texts)))
+    if "ngram" in methods:
         return (
-            f"{shown} verbatim overlap remains; "
-            f"ngram cannot compare rows shorter than {ngram_n} words"
+            f"{shown} n-gram overlap remains; "
+            f"ngram dropped grams appearing in at least {ngram_max_count} training rows"
         )
     return (
-        f"{shown} verbatim overlap remains; "
-        f"ngram dropped grams appearing in at least {ngram_max_count} training rows"
+        f"{shown} n-gram overlap remains; "
+        f"retained rows share an n-gram appearing in at least {ngram_max_count} training rows"
     )

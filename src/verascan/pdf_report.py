@@ -56,26 +56,81 @@ def _safe(text: str) -> str:
     return html.escape(visible).replace("\n", "<br/>")
 
 
+def _word_spans(text: str) -> list[tuple[int, int]]:
+    """Spans of the words ``str.split`` would return, in the original string."""
+    spans: list[tuple[int, int]] = []
+    index = 0
+    length = len(text)
+    while index < length:
+        while index < length and text[index].isspace():
+            index += 1
+        if index >= length:
+            break
+        start = index
+        while index < length and not text[index].isspace():
+            index += 1
+        spans.append((start, index))
+    return spans
+
+
+def _show_slice(text: str) -> str:
+    """Words in *text*, with omission notes for whitespace the font cannot draw.
+
+    Alignment uses ``str.split``, which drops a tab. Naming that tab before
+    the diff turns the note's space into a fake word and strikes its neighbor.
+    The note is inserted only while rendering a span the aligner already matched.
+    """
+    parts: list[str] = []
+    word: list[str] = []
+
+    def flush() -> None:
+        if word:
+            parts.append("".join(word))
+            word.clear()
+
+    for char in text:
+        if char.isspace():
+            flush()
+            shown = _show_text(char)
+            if shown != char:
+                parts.append(shown)
+        else:
+            word.append(char)
+    flush()
+    return " ".join(parts)
+
+
+def _render_span(text: str, spans: list[tuple[int, int]], start: int, end: int) -> str:
+    if start >= end:
+        return ""
+    raw = text[spans[start][0] : spans[end - 1][1]]
+    return _safe(_show_slice(raw))
+
+
 def _diff(train: str, eval_text: str) -> str:
     from verascan.report import _word_diff_opcodes
 
-    # ``str.split`` drops tab and vertical tab before a word is drawn.
-    # Naming those controls first keeps the same ``[U+XXXX omitted]`` mark
-    # ``_show_text`` uses for an emoji the font cannot draw.
-    train_words, eval_words, opcodes = _word_diff_opcodes(_show_text(train), _show_text(eval_text))
+    # Align the same words HTML uses. ``str.split`` drops a tab, so a tab
+    # between words is not a change. Undrawable whitespace is named from the
+    # original span after that alignment, which keeps the note in one piece.
+    opcodes = _word_diff_opcodes(train, eval_text)[2]
+    train_spans = _word_spans(train)
+    eval_spans = _word_spans(eval_text)
     parts: list[str] = []
     for tag, i, j, k, end in opcodes:
         if tag == "equal":
-            parts.append(_safe(" ".join(train_words[i:j])))
+            parts.append(_render_span(train, train_spans, i, j))
         if tag in {"delete", "replace"}:
             parts.append(
-                f'<font color="#9f1239" backColor="#ffe4e6"><strike>{_safe(" ".join(train_words[i:j]))}</strike></font>'
+                "<font color=\"#9f1239\" backColor=\"#ffe4e6\">"
+                f"<strike>{_render_span(train, train_spans, i, j)}</strike></font>"
             )
         if tag in {"insert", "replace"}:
             parts.append(
-                f'<font color="#166534" backColor="#dcfce7">{_safe(" ".join(eval_words[k:end]))}</font>'
+                "<font color=\"#166534\" backColor=\"#dcfce7\">"
+                f"{_render_span(eval_text, eval_spans, k, end)}</font>"
             )
-    return " ".join(parts) or "(empty text)"
+    return " ".join(part for part in parts if part) or "(empty text)"
 
 
 def write_pdf(report: ContaminationReport, path: str) -> None:

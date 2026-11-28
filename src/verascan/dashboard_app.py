@@ -15,7 +15,12 @@ import streamlit as st
 from verascan._version import __version__
 from verascan.dashboard import demo_report, load_report, report_metrics
 from verascan.dashboard_style import dashboard_css, match_table_html, theme_palette
-from verascan.report import _word_diff_html, format_contamination_rate, matching_criteria
+from verascan.report import (
+    _word_diff_html,
+    format_contamination_rate,
+    format_match_score,
+    matching_criteria,
+)
 
 st.set_page_config(
     page_title="Verascan | Audit overview", page_icon=":material/verified_user:", layout="wide"
@@ -222,7 +227,7 @@ else:
             visible.index.tolist(),
             key="pair",
             format_func=lambda idx: (
-                f"Eval {frame.loc[idx, 'eval_index']} / Train {frame.loc[idx, 'train_index']} · {frame.loc[idx, 'benchmark']} · {frame.loc[idx, 'method']} · {frame.loc[idx, 'score']:.4f}"
+                f"Eval {frame.loc[idx, 'eval_index']} / Train {frame.loc[idx, 'train_index']} · {frame.loc[idx, 'benchmark']} · {frame.loc[idx, 'method']} · {format_match_score(float(frame.loc[idx, 'score']))}"
             ),
         )
         row = frame.loc[selected]

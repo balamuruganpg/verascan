@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+from decimal import Decimal
 from pathlib import Path
 from typing import NoReturn
 
@@ -44,12 +45,27 @@ def _format_gate_percent(value: float) -> str:
     return f"{value * 100:.6g}%"
 
 
+def _collapsed_percent(value: float, places: int) -> str:
+    """Percent digits taken from the value itself, not from ``value * 100``.
+
+    Multiplying two nearby fractions by 100 can land on one float, so no
+    ``g`` format of the product can tell them apart.
+    """
+    if value == 0.0:
+        return "0%"
+    rendered = Decimal(format(value, ".17g")) * 100
+    text = f"{rendered:.{places}f}".rstrip("0").rstrip(".")
+    return f"{text or '0'}%"
+
+
 def _distinct_fail_percents(rate: float, fail_above: float) -> tuple[str, str]:
     """Print the rate and the gate as two different percentages.
 
     The summary format can round both to the same text while the rate is
     still strictly higher (``33.3%`` and ``33.3%``, or ``0.5%`` and ``0.5%``).
     Extra significant digits are added until the two shown numbers differ.
+    When ``rate * 100`` and ``gate * 100`` are the same float, the fractions
+    are formatted directly so the percentages still differ.
     """
     rate_text = format_contamination_rate(rate)
     threshold_text = _format_gate_percent(fail_above)
@@ -58,6 +74,11 @@ def _distinct_fail_percents(rate: float, fail_above: float) -> tuple[str, str]:
     for digits in range(1, 18):
         rate_text = f"{rate * 100:.{digits}g}%"
         threshold_text = f"{fail_above * 100:.{digits}g}%"
+        if rate_text != threshold_text:
+            return rate_text, threshold_text
+    for places in range(0, 24):
+        rate_text = _collapsed_percent(rate, places)
+        threshold_text = _collapsed_percent(fail_above, places)
         if rate_text != threshold_text:
             return rate_text, threshold_text
     return f"{rate * 100:.17g}%", f"{fail_above * 100:.17g}%"

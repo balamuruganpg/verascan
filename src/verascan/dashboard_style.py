@@ -6,6 +6,8 @@ import html
 from pathlib import Path
 from typing import Any
 
+from verascan.report import format_match_score
+
 
 def theme_palette(light: bool) -> dict[str, str]:
     """Keep all non-status colors on the grayscale axis."""
@@ -62,7 +64,7 @@ def match_table_html(rows: list[dict[str, Any]]) -> str:
         }
         body.append(
             f'<tr data-eval="{evaluation}" data-train="{training}">'
-            f'<td><span class="vs-score">{score:.4f}</span><span class="vs-score-track" aria-hidden="true"><i style="width:{bar}%"></i></span></td>'
+            f'<td><span class="vs-score">{format_match_score(score)}</span><span class="vs-score-track" aria-hidden="true"><i style="width:{bar}%"></i></span></td>'
             f'<td><span class="vs-method">{cells["method"]}</span></td>'
             f'<td class="vs-benchmark">{cells["benchmark"]}</td>'
             f'<td><div class="vs-table-text">{cells["train_text"]}</div></td>'
